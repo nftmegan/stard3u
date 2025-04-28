@@ -5,10 +5,10 @@ public class PlayerManager : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private PlayerInventory playerInventory;
     [SerializeField] private PlayerUIController uiController;
-    [SerializeField] private InventoryUIManager inventoryUIManager; // ✅ Needed!
-    [SerializeField] private Transform characterOrientation;
+    [SerializeField] private InventoryUIManager inventoryUIManager;
+    [SerializeField] private PlayerLook look; // Drag your CharacterOrientation (with PlayerLook) here
 
-    public PlayerOrientation Orientation { get; private set; }
+    public PlayerLook Look => look;
     public MyCharacterController MyCharacterController { get; private set; }
     public HeadBob HeadBob { get; private set; }
     public IPlayerInput InputProvider { get; private set; }
@@ -17,7 +17,6 @@ public class PlayerManager : MonoBehaviour
 
     private void Awake()
     {
-        Orientation = GetComponent<PlayerOrientation>();
         MyCharacterController = GetComponentInChildren<MyCharacterController>();
         HeadBob = GetComponentInChildren<HeadBob>();
         EquipmentController = GetComponentInChildren<EquipmentController>();
@@ -26,8 +25,9 @@ public class PlayerManager : MonoBehaviour
         InputProvider = GetComponent<IPlayerInput>();
         playerInventory ??= GetComponent<PlayerInventory>();
         uiController ??= GetComponent<PlayerUIController>();
-        inventoryUIManager ??= FindFirstObjectByType<InventoryUIManager>(); // ✅ auto-find if missing
 
+        if (look == null)
+            Debug.LogError("[PlayerManager] PlayerLook reference missing!");
         if (InputProvider == null)
             Debug.LogError("[PlayerManager] No IPlayerInput found!");
     }
@@ -36,20 +36,20 @@ public class PlayerManager : MonoBehaviour
     {
         if (playerInventory == null)
         {
-            Debug.LogError("[PlayerManager] No PlayerInventory assigned or found.");
+            //Debug.LogError("[PlayerManager] No PlayerInventory assigned or found.");
             return;
         }
 
         playerInventory.Initialize();
-        
+
         if (inventoryUIManager != null)
         {
-            inventoryUIManager.Initialize(playerInventory); // ✅ Properly initializing Inventory UI
-            Debug.Log("[PlayerManager] InventoryUIManager initialized successfully!");
+            inventoryUIManager.Initialize(playerInventory);
+            //Debug.Log("[PlayerManager] InventoryUIManager initialized successfully!");
         }
         else
         {
-            Debug.LogError("[PlayerManager] InventoryUIManager not found or assigned.");
+            //Debug.LogError("[PlayerManager] InventoryUIManager not found or assigned.");
         }
 
         uiController?.SetState(PlayerUIState.Gameplay);
@@ -61,35 +61,32 @@ public class PlayerManager : MonoBehaviour
 
         if (!uiController.IsUIOpen())
         {
-            Orientation.ApplyLookInput(InputProvider.LookAxisX, InputProvider.LookAxisY);
+            look.HandleInput(InputProvider);
         }
-
-        characterOrientation.rotation = Quaternion.Euler(Orientation.Pitch, Orientation.Yaw, 0f);
 
         playerInventory?.HandleInput(InputProvider);
 
-        Vector3 lookDir = Orientation.CurrentOrientation * Vector3.forward;
+        Vector3 lookDir = look.Orientation * Vector3.forward;
         MyCharacterController.HandleInput(InputProvider, lookDir);
 
         if (uiController.IsUIOpen())
             return;
-        
+
         EquipmentController?.HandleInput(InputProvider);
         WorldInteractor?.HandleInput(InputProvider);
     }
 
     private void LateUpdate()
     {
-        if (MyCharacterController != null && characterOrientation != null)
+        if (MyCharacterController != null && look != null)
         {
-            characterOrientation.position = MyCharacterController.GetSmoothedHeadWorldPosition();
+            look.transform.position = MyCharacterController.GetSmoothedHeadWorldPosition();
         }
     }
 
     private bool IsValid()
     {
-        return Orientation != null && characterOrientation != null &&
-               MyCharacterController != null && InputProvider != null && uiController != null;
+        return look != null && MyCharacterController != null && InputProvider != null && uiController != null;
     }
 
     // === Public Accessors ===

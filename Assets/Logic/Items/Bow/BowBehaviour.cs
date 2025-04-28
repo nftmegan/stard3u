@@ -24,9 +24,7 @@ public class BowBehavior : EquippableBehavior
     [SerializeField] private BowArrowVisualEffect arrowVisualEffect;
 
     [Header("Ammo Settings")]
-    [SerializeField] private ArrowItemData requiredArrowData; // 👈 Reference to the correct arrow type (assign in Inspector!)
-
-    private ArrowItemData currentArrow;
+    [SerializeField] private ArrowItemData requiredArrowData; // Reference to the arrow type
 
     private void Awake()
     {
@@ -84,15 +82,17 @@ public class BowBehavior : EquippableBehavior
             return;
 
         var inventory = equipment.GetPlayerInventory();
-        var stack = inventory?.FindItem(requiredArrowData); // ✅ New method!
+        if (inventory == null)
+            return;
 
-        if (stack == null || stack.quantity <= 0)
+        // Check if there's ammo available in the inventory
+        InventorySlot arrowSlot = inventory.GetSlotWithItem(requiredArrowData);
+        if (arrowSlot == null || arrowSlot.quantity <= 0)
         {
             Debug.Log("[Bow] No required arrows available.");
             return;
         }
 
-        currentArrow = (ArrowItemData)stack.data; // ✅ Now we reference the real stack
         StartPull();
     }
 
@@ -136,26 +136,25 @@ public class BowBehavior : EquippableBehavior
         arrowVisualEffect?.SetArrowVisibility(false);
         arrowVisualEffect?.UpdateDraw(0f);
 
-        if (currentArrow == null || currentArrow.projectilePrefab == null)
+        // Ensure ammo is available before shooting
+        var inventory = equipment.GetPlayerInventory();
+        var arrowSlot = inventory?.GetSlotWithItem(requiredArrowData);
+        
+        if (arrowSlot == null || arrowSlot.quantity <= 0)
         {
-            Debug.LogWarning("[Bow] Arrow missing or invalid.");
+            Debug.LogWarning("[Bow] No arrows left in inventory to shoot.");
             return;
         }
 
+        // Create the projectile
         Vector3 targetPoint = aimProvider.GetAimHitPoint();
         Vector3 direction = (targetPoint - arrowSpawnPoint.position).normalized;
 
-        var arrowInstance = Instantiate(
-            currentArrow.projectilePrefab,
-            arrowSpawnPoint.position,
-            Quaternion.LookRotation(direction)
-        );
+        var projectileInstance = Instantiate(requiredArrowData.projectilePrefab, arrowSpawnPoint.position, Quaternion.LookRotation(direction));
+        projectileInstance.Launch(direction, baseShootForce * normalizedPower);
 
-        arrowInstance.Launch(direction, baseShootForce * normalizedPower);
-
-        equipment.GetPlayerInventory()?.TryConsumeItem(currentArrow);
-
-        currentArrow = null;
+        // Consume one arrow from the inventory
+        inventory?.TryConsumeItem(requiredArrowData);
 
         StartCooldown();
     }

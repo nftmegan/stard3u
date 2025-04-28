@@ -1,168 +1,165 @@
-using UnityEngine;
 using System;
+using UnityEngine;
 
 public class PlayerInventory : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] private Inventory inventory;
+    [SerializeField] private Inventory       inventory;
     [SerializeField] private ToolbarSelector toolbarSelector;
-    public InventoryUIManager inventoryUIManager; // ✅ Direct reference to UI Manager!
+    public InventoryUIManager inventoryUIManager;
 
+    /// <summary>
+    /// Fired whenever the equipped slot’s item changes (due to slot swap,
+    /// pickup into selected slot, drop out of selected slot, etc.).
+    /// </summary>
     public event Action<InventoryItem> OnSelectedItemChanged;
 
-    private int selectedSlot = 0;
-    private InventoryItem equippedItemCache; // ✅ Track currently equipped item
+    private int           selectedSlot;
+    private InventoryItem equippedCache;
 
     private void Awake()
     {
-        if (inventory == null)
-            inventory = GetComponent<Inventory>();
+        // auto-find if not wired
+        inventory       ??= GetComponent<Inventory>();
+        toolbarSelector ??= GetComponent<ToolbarSelector>();
 
-        if (toolbarSelector == null)
-            toolbarSelector = GetComponent<ToolbarSelector>();
+        // listen for any inventory change
+        inventory.OnInventoryChanged += OnInventoryChanged;
     }
 
+    private void OnDestroy()
+    {
+        inventory.OnInventoryChanged -= OnInventoryChanged;
+    }
+
+    /// <summary>
+    /// Call once at startup to wire UI & default slot.
+    /// </summary>
     public void Initialize()
     {
         toolbarSelector.Initialize(inventory);
         SelectSlot(0);
-        inventory.OnInventoryChanged += RefreshUI;
-
-        // Initialize cache
-        equippedItemCache = inventory.GetItemAt(selectedSlot);
+        // initial UI draw
+        inventoryUIManager?.RefreshUI();
     }
 
+    /// <summary>
+    /// Handle keyboard/scroll to switch toolbar slots.
+    /// </summary>
     public void HandleInput(IPlayerInput input)
     {
         if (input == null) return;
 
-        for (int i = 0; i < 9; i++)
-        {
+        // 1–9 keys
+        for (int i = 0; i < toolbarSelector.GetToolbarSlotCount(); i++)
             if (Input.GetKeyDown(KeyCode.Alpha1 + i))
-            {
-                SelectSlot(i);
-                return;
-            }
-        }
+                { SelectSlot(i); return; }
 
+        // scroll
         float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (scroll < 0f) // Scroll down → next
-        {
-            if (selectedSlot < toolbarSelector.GetToolbarSlotCount() - 1)
-                SelectSlot(selectedSlot + 1);
-        }
-        else if (scroll > 0f) // Scroll up → previous
-        {
-            if (selectedSlot > 0)
-                SelectSlot(selectedSlot - 1);
-        }
+        if (scroll > 0f)
+            SelectSlot((selectedSlot + toolbarSelector.GetToolbarSlotCount() - 1) % toolbarSelector.GetToolbarSlotCount());
+        else if (scroll < 0f)
+            SelectSlot((selectedSlot + 1) % toolbarSelector.GetToolbarSlotCount());
     }
 
-    private void SelectSlot(int newIndex)
+    private void SelectSlot(int idx)
     {
-        if (newIndex < 0 || newIndex >= toolbarSelector.GetToolbarSlotCount())
-            return;
-
-        if (selectedSlot != newIndex)
-        {
-            selectedSlot = newIndex;
-            NotifySelection();
-        }
+        if (idx == selectedSlot) return;
+        selectedSlot = idx;
+        NotifySelectionChanged();
     }
 
-    private void NotifySelection()
+    private void NotifySelectionChanged()
     {
-        InventoryItem selectedItem = inventory.GetItemAt(selectedSlot);
-        equippedItemCache = selectedItem; // ✅ Update cache
-        OnSelectedItemChanged?.Invoke(selectedItem);
-
+        var slot = inventory.GetSlotAt(selectedSlot);
+        equippedCache = slot?.item;
+        OnSelectedItemChanged?.Invoke(equippedCache);
         toolbarSelector.UpdateSelection(selectedSlot);
         inventoryUIManager?.RefreshUI();
     }
 
-    private void RefreshUI()
+    /// <summary>
+    /// Called whenever *any* slot in the inventory changes.
+    /// We redraw the UI and re-check the selected slot’s item.
+    /// </summary>
+    private void OnInventoryChanged()
     {
         inventoryUIManager?.RefreshUI();
-        CheckSelectedItem(); // ✅ Check if item changed after inventory refresh
+        CheckSelectedItemChanged();
     }
 
-    private void CheckSelectedItem()
+    /// <summary>
+    /// If the selected‐slot’s item is now different from what we last had,
+    /// fire the equip event so EquipmentController switches models.
+    /// </summary>
+    private void CheckSelectedItemChanged()
     {
-        InventoryItem newSelectedItem = inventory.GetItemAt(selectedSlot);
-        if (newSelectedItem != equippedItemCache)
+        var slot    = inventory.GetSlotAt(selectedSlot);
+        var current = slot?.item;
+        if (current != equippedCache)
         {
-            Debug.Log("[PlayerInventory] Detected slot item change → Re-equipping.");
-            equippedItemCache = newSelectedItem;
-            OnSelectedItemChanged?.Invoke(newSelectedItem);
+            equippedCache = current;
+            OnSelectedItemChanged?.Invoke(equippedCache);
         }
     }
 
-    // === Public Methods ===
-    public void AddItem(ItemData itemData, int amount = 1)
+    public void RefreshSelection()
     {
-        inventory?.AddItem(itemData, amount);
-        inventoryUIManager?.RefreshUI();
-        CheckSelectedItem(); // ✅
+        var slot = inventory.GetSlotAt(selectedSlot);
+        var item = slot?.item;
+
+        if (item != equippedCache)
+        {
+            equippedCache = item;
+            OnSelectedItemChanged?.Invoke(equippedCache);
+        }
     }
 
-    public bool HasItem(ItemData itemData)
-    {
-        if (itemData == null) return false;
+    // ─── Public API ──────────────────────────────────────────────────────────
 
-        foreach (var item in inventory.Slots)
-        {
-            if (item != null && item.data == itemData && item.quantity > 0)
-                return true;
-        }
-        return false;
+    /// <summary>Adds into your inventory (stacks if possible).</summary>
+    public void AddItem(ItemData data, int amount = 1)
+    {
+        inventory.AddItem(data, amount);
     }
 
-    public InventoryItem FindItem(ItemData itemData)
-    {
-        if (itemData == null) return null;
+    /// <summary>Tries to consume that many from your inventory.</summary>
+    public bool TryConsumeItem(ItemData data, int amount = 1)
+        => inventory.TryConsumeItem(data, amount);
 
-        foreach (var item in inventory.Slots)
-        {
-            if (item != null && item.data == itemData && item.quantity > 0)
-                return item;
-        }
+    /// <summary>Withdraws up to amount into the given slot.</summary>
+    public bool Withdraw(ItemData data, int amount, InventorySlot targetSlot)
+        => inventory.Withdraw(data, amount, targetSlot);
+
+    /// <summary>Swap two slots (toolbar or bag).</summary>
+    public void SwapItems(int a, int b)
+        => inventory.SwapItems(a, b);
+
+    /// <summary>Changes your total slot count (toolbar+bag).</summary>
+    public void ResizeInventory(int newSize)
+        => inventory.Resize(newSize);
+
+    /// <summary>Finds the first slot containing at least one of that item.</summary>
+    public InventorySlot GetSlotWithItem(ItemData data)
+    {
+        foreach (var s in inventory.Slots)
+            if (s != null && s.item != null && s.item.data == data && s.quantity > 0)
+                return s;
         return null;
     }
 
-    public bool TryConsumeItem(ItemData itemData)
-    {
-        bool result = inventory?.TryConsumeItem(itemData) ?? false;
-        if (result)
-        {
-            inventoryUIManager?.RefreshUI();
-            CheckSelectedItem(); // ✅
-        }
-        return result;
-    }
+    /// <summary>Subscribe to selection changes (for equipment).</summary>
+    public void SubscribeToSelectionChanges(Action<InventoryItem> cb)
+        => OnSelectedItemChanged += cb;
 
-    public void SwapItems(int indexA, int indexB)
-    {
-        inventory?.SwapItems(indexA, indexB);
-        inventoryUIManager?.RefreshUI();
-        CheckSelectedItem(); // ✅
-    }
+    /// <summary>Unsubscribe.</summary>
+    public void UnsubscribeFromSelectionChanges(Action<InventoryItem> cb)
+        => OnSelectedItemChanged -= cb;
 
-    public InventoryItem GetSelectedItem() => inventory.GetItemAt(selectedSlot);
-    public int GetSelectedIndex() => selectedSlot;
-    public InventoryItem GetItemAt(int index) => inventory.GetItemAt(index);
-    public void ResizeInventory(int newSize) => inventory?.Resize(newSize);
-
-    public Inventory GetInventory() => inventory;
+    public InventorySlot   GetSlotAt(int i)     => inventory.GetSlotAt(i);
+    public int             GetSelectedIndex()   => selectedSlot;
+    public InventoryItem   GetSelectedItem()    => inventory.GetSlotAt(selectedSlot)?.item;
+    public Inventory       GetInventory()       => inventory;
     public ToolbarSelector GetToolbarSelector() => toolbarSelector;
-
-    // === Selection Subscription for Equipment Controller ===
-    public void SubscribeToSelectionChanges(Action<InventoryItem> callback)
-    {
-        OnSelectedItemChanged += callback;
-    }
-
-    public void UnsubscribeFromSelectionChanges(Action<InventoryItem> callback)
-    {
-        OnSelectedItemChanged -= callback;
-    }
 }

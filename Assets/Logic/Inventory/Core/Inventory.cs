@@ -1,45 +1,41 @@
 using UnityEngine;
-using System;
 
 public class Inventory : MonoBehaviour
 {
-    public event Action OnInventoryChanged;
-    public InventoryItem[] Slots { get; private set; }
+    public event System.Action OnInventoryChanged;
+    public InventorySlot[] Slots { get; private set; }
 
-    private void Awake()
-    {
-        Slots = new InventoryItem[9]; // Default safety size
-    }
+    void Awake() => Slots = new InventorySlot[9];
 
     public void Resize(int newSize)
     {
-        Slots = new InventoryItem[newSize];
+        Slots = new InventorySlot[newSize];
         OnInventoryChanged?.Invoke();
-        Debug.Log($"[Inventory] Resized to {newSize} slots.");
     }
 
+    /* ---------------- Add ---------------- */
     public void AddItem(ItemData newItem, int amount = 1)
     {
         if (newItem == null || amount <= 0) return;
 
-        if (newItem.stackable)
+        /* try stack */
+        for (int i = 0; i < Slots.Length; i++)
         {
-            for (int i = 0; i < Slots.Length; i++)
+            var s = Slots[i];
+            if (s != null && s.item != null && s.item.data == newItem)
             {
-                if (Slots[i] != null && Slots[i].data == newItem)
-                {
-                    Slots[i].quantity += amount;
-                    OnInventoryChanged?.Invoke();
-                    return;
-                }
+                s.AddQuantity(amount);
+                OnInventoryChanged?.Invoke();
+                return;
             }
         }
 
+        /* first truly empty slot */
         for (int i = 0; i < Slots.Length; i++)
         {
-            if (Slots[i] == null)
+            if (Slots[i] == null || Slots[i].item == null)
             {
-                Slots[i] = new InventoryItem { data = newItem, quantity = amount };
+                Slots[i] = new InventorySlot(new InventoryItem { data = newItem }, amount);
                 OnInventoryChanged?.Invoke();
                 return;
             }
@@ -48,60 +44,72 @@ public class Inventory : MonoBehaviour
         Debug.LogWarning("[Inventory] Inventory full.");
     }
 
-    public void SwapItems(int indexA, int indexB)
+    /* ------------- Withdraw ------------- */
+    public bool Withdraw(ItemData itemData, int amount, InventorySlot targetSlot)
     {
-        if (!IsValidIndex(indexA) || !IsValidIndex(indexB) || indexA == indexB)
+        if (itemData == null || amount <= 0 || targetSlot == null)
+            return false;
+
+        int remaining = amount;
+        bool anyTaken = false;
+
+        for (int i = 0; i < Slots.Length && remaining > 0; i++)
         {
-            Debug.LogWarning($"[Inventory] Invalid swap: {indexA} ↔ {indexB}");
-            return;
+            var src = Slots[i];
+            if (src == null || src.item == null) continue;
+            if (src.item.data != itemData || src.quantity == 0) continue;
+
+            int take = Mathf.Min(src.quantity, remaining);
+
+            /* ── ensure magazine holds a proper InventoryItem ─────────────── */
+            if (targetSlot.item == null)
+                targetSlot.item = src.quantity == take && remaining == take
+                                ? src.item                 // move reference
+                                : new InventoryItem();     // create new
+
+            targetSlot.item.data = itemData;  // make sure data is correct
+            targetSlot.AddQuantity(take);
+
+            src.ReduceQuantity(take);
+            remaining  -= take;
+            anyTaken    = true;
+
+            /* if we moved the whole stack, clear the backpack slot completely */
+            if (src.IsEmpty())
+                src.Clear();
         }
 
-        (Slots[indexA], Slots[indexB]) = (Slots[indexB], Slots[indexA]);
-        OnInventoryChanged?.Invoke();
+        if (anyTaken)
+            OnInventoryChanged?.Invoke();
+
+        return anyTaken;
     }
 
-    public InventoryItem GetItemAt(int index)
+    /* ------------- Consume -------------- */
+    public bool TryConsumeItem(ItemData data, int amount = 1)
     {
-        return IsValidIndex(index) ? Slots[index] : null;
-    }
-
-    public InventoryItem GetItemByCode(string itemCode)
-    {
-        if (string.IsNullOrWhiteSpace(itemCode)) return null;
-
-        foreach (var item in Slots)
-        {
-            if (item != null && item.data != null && item.data.itemCode == itemCode)
-            {
-                return item;
-            }
-        }
-
-        return null;
-    }
-
-    public bool TryConsumeItem(ItemData itemData, int amount = 1)
-    {
-        if (itemData == null || amount <= 0) return false;
+        if (data == null || amount <= 0) return false;
 
         for (int i = 0; i < Slots.Length; i++)
         {
-            var item = Slots[i];
-            if (item != null && item.data == itemData && item.quantity >= amount)
-            {
-                item.quantity -= amount;
-                if (item.quantity <= 0)
-                    Slots[i] = null;
+            var s = Slots[i];
+            if (s == null || s.item == null) continue;
+            if (s.item.data != data || s.quantity < amount) continue;
 
-                OnInventoryChanged?.Invoke();
-                return true;
-            }
+            s.ReduceQuantity(amount);
+            OnInventoryChanged?.Invoke();
+            return true;
         }
-
         return false;
     }
 
-    public int GetSlotCount() => Slots.Length;
+    /* ------------ misc helpers ---------- */
+    public void SwapItems(int a, int b)
+    {
+        if (a < 0 || b < 0 || a >= Slots.Length || b >= Slots.Length || a == b) return;
+        (Slots[a], Slots[b]) = (Slots[b], Slots[a]);
+        OnInventoryChanged?.Invoke();
+    }
 
-    private bool IsValidIndex(int index) => index >= 0 && index < Slots.Length;
+    public InventorySlot GetSlotAt(int i) => (i >= 0 && i < Slots.Length) ? Slots[i] : null;
 }

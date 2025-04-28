@@ -37,6 +37,8 @@ public class MyCharacterController : MonoBehaviour, ICharacterController
     public bool isCrouching;
     public float smoothedHeight { get; private set; }
 
+    public Vector3 Velocity { get; private set; } // ✅ NEW FIELD
+
     private Vector3 _moveInput;
     private Vector3 _lookDirection = Vector3.forward;
     private bool _jumpRequested;
@@ -141,6 +143,8 @@ public class MyCharacterController : MonoBehaviour, ICharacterController
                 _jumpRequested = false;
             }
         }
+
+        Velocity = currentVelocity; // ✅ Update stored Velocity every frame
     }
 
     public void UpdateRotation(ref Quaternion currentRotation, float deltaTime) { }
@@ -163,6 +167,8 @@ public class MyCharacterController : MonoBehaviour, ICharacterController
     {
         return transform.position + Vector3.up * _visualHeadHeight;
     }
+
+    public Vector3 GetVelocity() => Velocity; // ✅ Getter for outside systems (Viewmodel Animator, etc.)
 
     public void PostGroundingUpdate(float deltaTime) { }
 

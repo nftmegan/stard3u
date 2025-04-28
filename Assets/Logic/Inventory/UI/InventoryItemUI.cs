@@ -1,73 +1,65 @@
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
-public class InventoryItemUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class InventoryItemUI : MonoBehaviour,
+                              IBeginDragHandler,
+                              IDragHandler,
+                              IEndDragHandler
 {
     [SerializeField] private Image iconImage;
-    [SerializeField] private Text quantityText;
+    [SerializeField] private Text  quantityText;
 
-    private RectTransform rectTransform;
-    private Canvas canvas;
-    private CanvasGroup canvasGroup;
-    private int sourceSlotIndex;
-
-    private Vector2 originalPosition;
-    private Transform originalParent;
-
-    private bool wasDropped = false;
+    private RectTransform rect;
+    private CanvasGroup   grp;
+    private Canvas        rootCanvas;
+    private int           sourceSlot;
+    private Transform     originalParent;
+    private bool          wasDropped;
 
     private void Awake()
     {
-        rectTransform = GetComponent<RectTransform>();
-        canvasGroup = GetComponent<CanvasGroup>();
-        canvas = GetComponentInParent<Canvas>();
+        rect = GetComponent<RectTransform>();
+        grp  = GetComponent<CanvasGroup>();
+        rootCanvas = GetComponentInParent<Canvas>();
     }
 
-    public void Initialize(Sprite icon, int quantity, int slotIndex)
+    public void Initialize(Sprite icon, int qty, int slotIdx)
     {
         iconImage.sprite = icon;
         iconImage.enabled = true;
-        quantityText.text = quantity > 1 ? quantity.ToString() : "";
-        sourceSlotIndex = slotIndex;
+        quantityText.text = qty > 1 ? qty.ToString() : "";
+        sourceSlot = slotIdx;
     }
 
-    public int GetSlotIndex() => sourceSlotIndex;
+    public int GetSlotIndex() => sourceSlot;
 
-    public void OnBeginDrag(PointerEventData eventData)
+    public void OnBeginDrag(PointerEventData e)
     {
-        originalPosition = rectTransform.anchoredPosition;
+        wasDropped    = false;
         originalParent = transform.parent;
-
-        canvasGroup.blocksRaycasts = false;
-        transform.SetParent(canvas.transform);
-        wasDropped = false;
+        grp.blocksRaycasts = false;
+        transform.SetParent(rootCanvas.transform, false);
     }
 
-    public void OnDrag(PointerEventData eventData)
+    public void OnDrag(PointerEventData e)
     {
-        rectTransform.position = Input.mousePosition;
+        rect.position = Input.mousePosition;
     }
 
-    public void OnEndDrag(PointerEventData eventData)
+    public void OnEndDrag(PointerEventData e)
     {
-        canvasGroup.blocksRaycasts = true;
-
+        grp.blocksRaycasts = true;
         if (wasDropped)
         {
-            Debug.Log("[ItemUI] Item dropped successfully, destroying dragged visual.");
-            Destroy(gameObject); // ✅ DESTROY immediately without resetting parent
+            Destroy(gameObject);
         }
         else
         {
-            Debug.Log("[ItemUI] Drag canceled, returning to original slot.");
-            transform.SetParent(originalParent);
-            rectTransform.anchoredPosition = Vector2.zero;
+            transform.SetParent(originalParent, false);
+            rect.anchoredPosition = Vector2.zero;
         }
     }
 
-    public void MarkAsDropped()
-    {
-        wasDropped = true;
-    }
+    public void MarkAsDropped() => wasDropped = true;
 }

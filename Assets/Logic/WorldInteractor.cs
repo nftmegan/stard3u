@@ -11,15 +11,20 @@ public class WorldInteractor : MonoBehaviour
     [SerializeField] private float interactionRange = 3f;
 
     private PlayerManager playerManager;
+    private PlayerLook playerLook;
 
-    void Awake()
+    private void Awake()
     {
         playerManager = GetComponentInParent<PlayerManager>();
+        if (playerManager != null)
+        {
+            playerLook = playerManager.Look;
+        }
     }
 
     public void HandleInput(IPlayerInput input)
     {
-        if (input == null || !input.InteractDown || playerManager == null)
+        if (input == null || !input.InteractDown || playerManager == null || playerLook == null)
             return;
 
         TryInteract();
@@ -27,7 +32,7 @@ public class WorldInteractor : MonoBehaviour
 
     private void TryInteract()
     {
-        Ray ray = playerManager.Orientation.GetLookRay();
+        Ray ray = playerLook.GetLookRay();
 
         LayerMask interactMask = LayerMask.GetMask("Interactable");
         if (Physics.Raycast(ray, out RaycastHit hit, interactionRange, interactMask, QueryTriggerInteraction.Collide))

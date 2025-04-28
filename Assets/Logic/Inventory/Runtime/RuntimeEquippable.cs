@@ -3,7 +3,7 @@ using UnityEngine;
 public class RuntimeEquippable : MonoBehaviour, IRuntimeItem
 {
     [SerializeField] private string itemCode;
-    private InventoryItem runtimeInventoryItem;
+    public InventoryItem runtimeInventoryItem;
 
     public string GetItemCode() => itemCode;
 
@@ -13,8 +13,7 @@ public class RuntimeEquippable : MonoBehaviour, IRuntimeItem
     {
         runtimeInventoryItem = new InventoryItem
         {
-            data = itemData,
-            quantity = 1
+            data = itemData
         };
     }
 

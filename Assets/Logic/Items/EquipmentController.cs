@@ -33,7 +33,7 @@ public class EquipmentController : MonoBehaviour
     {
         if (playerInventory != null)
         {
-            playerInventory.SubscribeToSelectionChanges(TryEquipItem);
+            playerInventory.OnSelectedItemChanged += TryEquipItem;
         }
     }
 
@@ -41,7 +41,7 @@ public class EquipmentController : MonoBehaviour
     {
         if (playerInventory != null)
         {
-            playerInventory.UnsubscribeFromSelectionChanges(TryEquipItem);
+            playerInventory.OnSelectedItemChanged -= TryEquipItem;
         }
     }
 
@@ -98,7 +98,7 @@ public class EquipmentController : MonoBehaviour
     private void TryEquipItem(InventoryItem item)
     {
         if (item == equippedInventoryItem)
-            return; // Same instance, skip
+            return; // same item, skip
 
         EquipSelectedItem(item);
     }
@@ -141,5 +141,4 @@ public class EquipmentController : MonoBehaviour
     public PlayerInventory GetPlayerInventory() => playerInventory;
     public GameObject GetCurrentItemObject() => currentItemObject;
     public IItemInputReceiver GetCurrentInputReceiver() => currentInputReceiver;
-    
 }

@@ -36,12 +36,12 @@ public class PlayerUIController : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Tab))
         {
-            Debug.Log("[PlayerUIController] TAB pressed → toggling inventory.");
+            //Debug.Log("[PlayerUIController] TAB pressed → toggling inventory.");
             ToggleInventory();
         }
         else if (Input.GetKeyDown(KeyCode.P))
         {
-            Debug.Log("[PlayerUIController] ESC pressed → toggling menu.");
+            //Debug.Log("[PlayerUIController] ESC pressed → toggling menu.");
             ToggleMenu();
         }
     }
@@ -66,14 +66,14 @@ public class PlayerUIController : MonoBehaviour
     {
         if (!force && currentState == newState)
         {
-            Debug.Log($"[PlayerUIController] Already in state {newState}, skipping SetState.");
+            //Debug.Log($"[PlayerUIController] Already in state {newState}, skipping SetState.");
             return;
         }
 
         PlayerUIState previousState = currentState;
         currentState = newState;
 
-        Debug.Log($"[PlayerUIController] State changed: {previousState} → {currentState}");
+        //Debug.Log($"[PlayerUIController] State changed: {previousState} → {currentState}");
 
         UpdateUIVisibility();
         UpdateCursorLock();

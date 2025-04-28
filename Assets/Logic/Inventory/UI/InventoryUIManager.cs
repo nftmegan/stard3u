@@ -2,83 +2,87 @@ using UnityEngine;
 
 public class InventoryUIManager : MonoBehaviour
 {
+    public PlayerInventory   playerInv;
+
     [Header("UI References")]
     [SerializeField] private InventoryItemUI itemPrefab;
-    [SerializeField] private Transform toolbarParent;
-    [SerializeField] private Transform mainInventoryParent;
-    [SerializeField] private Color selectedColor = Color.yellow;
-    [SerializeField] private Color normalColor = Color.white;
+    [SerializeField] private Transform       toolbarParent;
+    [SerializeField] private Transform       bagParent;
+    [SerializeField] private Color           selectedColor = Color.yellow;
+    [SerializeField] private Color           normalColor   = Color.white;
 
-    private PlayerInventory playerInventory;
-    private InventorySlotUI[] toolbarSlots;
-    private InventorySlotUI[] bagSlots;
+    public InventorySlotUI[] toolbarSlots;
+    public InventorySlotUI[] bagSlots;
 
-    public void Initialize(PlayerInventory playerInventory)
+    /// <summary>
+    /// Call once after wiring references (e.g. from PlayerManager.Start).
+    /// </summary>
+    public void Initialize(PlayerInventory pi)
     {
-        this.playerInventory = playerInventory;
+        print("INITIALIZED MOTHER ASDASDASDASDA");
 
-        if (itemPrefab == null || toolbarParent == null || mainInventoryParent == null)
-        {
-            Debug.LogError("[InventoryUIManager] Missing references!");
-            return;
-        }
+
+        playerInv = pi;
 
         toolbarSlots = toolbarParent.GetComponentsInChildren<InventorySlotUI>(true);
-        bagSlots = mainInventoryParent.GetComponentsInChildren<InventorySlotUI>(true);
+        bagSlots     = bagParent    .GetComponentsInChildren<InventorySlotUI>(true);
 
-        int totalSlots = toolbarSlots.Length + bagSlots.Length;
-        playerInventory.ResizeInventory(totalSlots);
+        int total = toolbarSlots.Length + bagSlots.Length;
+        playerInv.ResizeInventory(total);
 
-        // Assign correct slot indices
+        // assign indices and manager reference
         for (int i = 0; i < toolbarSlots.Length; i++)
-            toolbarSlots[i].Setup(i);
-
+            toolbarSlots[i].Setup(i, this);
         for (int i = 0; i < bagSlots.Length; i++)
-            bagSlots[i].Setup(i + toolbarSlots.Length);
+            bagSlots[i].Setup(i + toolbarSlots.Length, this);
 
-        playerInventory.GetInventory().OnInventoryChanged += RefreshUI;
-        playerInventory.GetToolbarSelector().OnSelectedIndexChanged += UpdateToolbarHighlight;
+        // subscribe
+        playerInv.GetInventory().OnInventoryChanged           += RefreshUI;
+        playerInv.GetToolbarSelector().OnSelectedIndexChanged += UpdateHighlight;
 
+        // initial draw
         RefreshUI();
-        UpdateToolbarHighlight(playerInventory.GetSelectedIndex());
+        UpdateHighlight(playerInv.GetSelectedIndex());
+    }
+
+    /// <summary>Called by InventorySlotUI on a drop.</summary>
+    public void OnSlotDrop(int fromIndex, int toIndex)
+    {
+        playerInv.SwapItems(fromIndex, toIndex);
+        ForceRefreshUI();
+        playerInv.RefreshSelection(); // make equipment update if needed
     }
 
     public void RefreshUI()
     {
-        if (playerInventory == null) return;
-
-        var inventory = playerInventory.GetInventory();
+        var inv = playerInv.GetInventory();
 
         for (int i = 0; i < toolbarSlots.Length; i++)
-            RefreshSlot(toolbarSlots[i], inventory.GetItemAt(i));
-
+            DrawSlot(toolbarSlots[i], inv.GetSlotAt(i));
         for (int i = 0; i < bagSlots.Length; i++)
-            RefreshSlot(bagSlots[i], inventory.GetItemAt(i + toolbarSlots.Length));
+            DrawSlot(bagSlots[i], inv.GetSlotAt(i + toolbarSlots.Length));
     }
 
-    private void RefreshSlot(InventorySlotUI slot, InventoryItem item)
+    private void DrawSlot(InventorySlotUI ui, InventorySlot slot)
     {
-        foreach (Transform child in slot.transform)
-            Destroy(child.gameObject);
+        foreach (Transform c in ui.transform) Destroy(c.gameObject);
 
-        if (item != null)
+        if (slot != null && slot.item != null && slot.quantity > 0)
         {
-            var ui = Instantiate(itemPrefab, slot.transform);
-            ui.Initialize(item.data.icon, item.quantity, slot.GetSlotIndex());
+            var v = Instantiate(itemPrefab, ui.transform);
+            v.Initialize(slot.item.data.icon, slot.quantity, ui.GetSlotIndex());
         }
     }
 
-    private void UpdateToolbarHighlight(int selectedIndex)
+    private void UpdateHighlight(int idx)
     {
         for (int i = 0; i < toolbarSlots.Length; i++)
-        {
-            toolbarSlots[i].SetSelected(i == selectedIndex, selectedColor, normalColor);
-        }
+            toolbarSlots[i].SetSelected(i == idx, selectedColor, normalColor);
     }
 
     public void ForceRefreshUI()
     {
-        Debug.Log("[InventoryUIManager] Force refreshing UI...");
         RefreshUI();
+        UpdateHighlight(playerInv.GetSelectedIndex());
     }
 }
