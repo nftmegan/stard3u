@@ -4,10 +4,6 @@ public class BulletProjectile : ProjectileBehavior
 {
     [Header("Settings")]
     [SerializeField] protected float impactForceMultiplier = 1f;
-    [SerializeField] protected float bulletSpeed = 50f; // Bullet speed
-
-    [Header("Gravity Settings")]
-    [SerializeField] protected Vector3 gravity = new Vector3(0f, -9.81f, 0f); // Optional, typically not needed for bullets
 
     protected bool hasLaunched = false;
     protected Vector3 velocity;
@@ -27,6 +23,7 @@ public class BulletProjectile : ProjectileBehavior
         if (!hasLaunched) return;
 
         // Apply gravity (optional for realism)
+        Vector3 gravity = new Vector3(0f, -9.81f, 0f);
         velocity += gravity * Time.fixedDeltaTime;
         Vector3 movement = velocity * Time.fixedDeltaTime;
 
@@ -54,7 +51,7 @@ public class BulletProjectile : ProjectileBehavior
         if (hasLaunched) return;
 
         hasLaunched = true;
-        velocity = direction.normalized * bulletSpeed;
+        velocity = direction.normalized * force;
         transform.rotation = Quaternion.LookRotation(direction);
     }
 

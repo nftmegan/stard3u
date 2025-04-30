@@ -3,7 +3,7 @@
 // ========================
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "NewToolItem", menuName = "Items/Tool Item")]
+[CreateAssetMenu(fileName = "NewToolItem", menuName = "Items/Tool")]
 public class ToolItemData : ItemData
 {
     private void OnEnable()

@@ -19,7 +19,6 @@ public class FirearmAudioHandler : MonoBehaviour
     private void Awake()
     {
         audioSource = GetComponent<AudioSource>();
-        audioSource.playOnAwake = false;
     }
 
     // Play fire sound (when the weapon shoots)

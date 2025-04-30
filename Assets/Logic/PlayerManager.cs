@@ -1,100 +1,99 @@
 using UnityEngine;
-
+using UI.Inventory;          // InventoryUIManager + SlotView
+                              //  (SlotView raises drag events)
+                              
 public class PlayerManager : MonoBehaviour
 {
     [Header("Dependencies")]
-    [SerializeField] private PlayerInventory playerInventory;
-    [SerializeField] private PlayerUIController uiController;
+    [SerializeField] private PlayerInventory    playerInventory;
     [SerializeField] private InventoryUIManager inventoryUIManager;
-    [SerializeField] private PlayerLook look; // Drag your CharacterOrientation (with PlayerLook) here
+
+    [Header("New UI pipeline")]
+    [SerializeField] private UIStateController  uiState;
+    [SerializeField] private UIPanelRegistry    uiRegistry;
+
+    [Header("Look / Movement")]
+    [SerializeField] private PlayerLook look;   // drag the rig’s PlayerLook
 
     public PlayerLook Look => look;
     public MyCharacterController MyCharacterController { get; private set; }
-    public HeadBob HeadBob { get; private set; }
-    public IPlayerInput InputProvider { get; private set; }
-    public EquipmentController EquipmentController { get; private set; }
-    public WorldInteractor WorldInteractor { get; private set; }
+    public HeadBob               HeadBob               { get; private set; }
+    public IPlayerInput          InputProvider         { get; private set; }
+    public EquipmentController   EquipmentController   { get; private set; }
+    public WorldInteractor       WorldInteractor       { get; private set; }
 
+    /* ─────────────────────────── Awake ─────────────────────────── */
     private void Awake()
     {
         MyCharacterController = GetComponentInChildren<MyCharacterController>();
-        HeadBob = GetComponentInChildren<HeadBob>();
-        EquipmentController = GetComponentInChildren<EquipmentController>();
-        WorldInteractor = GetComponentInChildren<WorldInteractor>();
+        HeadBob               = GetComponentInChildren<HeadBob>();
+        EquipmentController   = GetComponentInChildren<EquipmentController>();
+        WorldInteractor       = GetComponentInChildren<WorldInteractor>();
 
-        InputProvider = GetComponent<IPlayerInput>();
+        InputProvider   ??= GetComponent<IPlayerInput>();
         playerInventory ??= GetComponent<PlayerInventory>();
-        uiController ??= GetComponent<PlayerUIController>();
+        uiState         ??= GetComponent<UIStateController>();
+        if (uiRegistry  == null)  uiRegistry = FindFirstObjectByType<UIPanelRegistry>();
 
-        if (look == null)
-            Debug.LogError("[PlayerManager] PlayerLook reference missing!");
-        if (InputProvider == null)
-            Debug.LogError("[PlayerManager] No IPlayerInput found!");
+        if (look == null)          Debug.LogError("[PlayerManager] PlayerLook missing!");
+        if (InputProvider == null) Debug.LogError("[PlayerManager] IPlayerInput missing!");
+        if (uiState == null)       Debug.LogError("[PlayerManager] UIStateController missing!");
+        if (uiRegistry == null)    Debug.LogError("[PlayerManager] UIPanelRegistry missing in scene!");
+
+        /* hook the registry so panels follow state changes */
+        uiRegistry?.Hook(uiState);
     }
 
+    /* ─────────────────────────── Start ─────────────────────────── */
     private void Start()
     {
-        if (playerInventory == null)
-        {
-            //Debug.LogError("[PlayerManager] No PlayerInventory assigned or found.");
-            return;
-        }
+        if (!playerInventory) return;
 
         playerInventory.Initialize();
+        inventoryUIManager?.Initialize(playerInventory);
 
-        if (inventoryUIManager != null)
-        {
-            inventoryUIManager.Initialize(playerInventory);
-            //Debug.Log("[PlayerManager] InventoryUIManager initialized successfully!");
-        }
-        else
-        {
-            //Debug.LogError("[PlayerManager] InventoryUIManager not found or assigned.");
-        }
-
-        uiController?.SetState(PlayerUIState.Gameplay);
+        /* ensure game starts in locked-cursor gameplay mode */
+        uiState?.SetState(UIState.Gameplay, true);
     }
 
+    /* ─────────────────────────── Update ────────────────────────── */
     private void Update()
     {
         if (!IsValid()) return;
 
-        if (!uiController.IsUIOpen())
-        {
+        /* free-look only when no UI is open */
+        if (!uiState.IsUIOpen)
             look.HandleInput(InputProvider);
-        }
 
         playerInventory?.HandleInput(InputProvider);
 
         Vector3 lookDir = look.Orientation * Vector3.forward;
         MyCharacterController.HandleInput(InputProvider, lookDir);
 
-        if (uiController.IsUIOpen())
-            return;
+        if (uiState.IsUIOpen) return;   // stop here if UI visible
 
         EquipmentController?.HandleInput(InputProvider);
-        WorldInteractor?.HandleInput(InputProvider);
+        WorldInteractor    ?.HandleInput(InputProvider);
     }
 
     private void LateUpdate()
     {
         if (MyCharacterController != null && look != null)
         {
-            look.transform.position = MyCharacterController.GetSmoothedHeadWorldPosition();
+            Vector3 targetPos = MyCharacterController.GetSmoothedHeadWorldPosition();
+            look.transform.position = Vector3.Lerp(
+                    look.transform.position, targetPos, Time.deltaTime * 20f);
         }
     }
 
-    private bool IsValid()
-    {
-        return look != null && MyCharacterController != null && InputProvider != null && uiController != null;
-    }
+    private bool IsValid() =>
+        look != null &&
+        MyCharacterController != null &&
+        InputProvider != null &&
+        uiState != null;
 
-    // === Public Accessors ===
-    public PlayerInventory GetInventory() => playerInventory;
-    public WorldInteractor GetWorldInteractor() => WorldInteractor;
-
-    public void SetSlowWalk(bool value)
-    {
-        MyCharacterController?.ForceSlowWalk(value);
-    }
+    /* ─────────── public helpers ─────────── */
+    public PlayerInventory GetInventory()         => playerInventory;
+    public WorldInteractor GetWorldInteractor()   => WorldInteractor;
+    public void SetSlowWalk(bool v)               => MyCharacterController?.ForceSlowWalk(v);
 }

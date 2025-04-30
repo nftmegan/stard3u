@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "NewProjectileItem", menuName = "Items/Projectile Item")]
+[CreateAssetMenu(fileName = "NewProjectileItem", menuName = "Items/Projectile")]
 public class ProjectileItemData : ItemData
 {
     [Header("Projectile Settings")]

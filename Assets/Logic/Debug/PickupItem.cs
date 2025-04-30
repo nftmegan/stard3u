@@ -1,32 +1,32 @@
+// Assets/Logic/Items/Pickups/PickupItem.cs
+using Game.InventoryLogic;
 using UnityEngine;
 
-public class PickupItem : MonoBehaviour, IInteractable
+/// <summary>
+/// Base class for any object the player can pick up.
+/// Children must override <see cref="BuildSlot"/> and return a *fresh*
+/// InventorySlot representing their contents.
+/// </summary>
+public abstract class PickupItem : MonoBehaviour, IInteractable
 {
-    [Header("Pickup Settings")]
-    [SerializeField] private InventorySlot inventorySlot;  // The InventorySlot to be picked up (including quantity)
+    [Header("FX (optional)")]
+    [SerializeField] private GameObject pickupEffect;
 
-    [Header("Feedback")]
-    [SerializeField] private GameObject pickupEffect; // Effect when picking up
+    /** Child classes provide the slot contents here */
+    protected abstract InventorySlot BuildSlot();
 
     public void Interact(PlayerManager player)
     {
-        var inventory = player.GetInventory();
+        var bag  = player.GetInventory();
+        var slot = BuildSlot();                  // ← ask the subclass
 
-        if (inventory != null && inventorySlot != null && inventorySlot.item != null)
-        {
-            // Add the item to the inventory (using the quantity stored in InventorySlot)
-            inventory.AddItem(inventorySlot.item.data, inventorySlot.quantity);
+        if (bag == null || slot?.item == null) return;
 
-            // Show pickup effect (if any)
-            if (pickupEffect != null)
-                Instantiate(pickupEffect, transform.position, Quaternion.identity);
+        bag.AddItem(slot.item, Mathf.Max(1, slot.quantity));
 
-            // Destroy the pickup object after interacting
-            Destroy(gameObject);
-        }
-        else
-        {
-            Debug.LogWarning("PickupItem: Missing item data or player inventory.");
-        }
+        if (pickupEffect)
+            Instantiate(pickupEffect, transform.position, Quaternion.identity);
+
+        Destroy(gameObject);
     }
 }

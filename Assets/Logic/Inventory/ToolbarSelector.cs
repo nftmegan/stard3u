@@ -1,51 +1,30 @@
 using UnityEngine;
 using System;
 
+/// <summary>
+/// Thin helper that keeps a “current index” inside a fixed slot range.
+/// No inventory references; no UnityEvents.  It simply fires <see cref="OnIndexChanged"/>
+/// so the UI and gameplay can respond.
+/// </summary>
 public class ToolbarSelector : MonoBehaviour
 {
-    [SerializeField] private int toolbarSlotCount = 9; // Number of slots on the toolbar
-    private Inventory inventory;
-    private int selectedIndex = 0;
+    [SerializeField] private int slotCount = 9;
 
-    public event Action<InventoryItem> OnSelectedItemChanged;
-    public event Action<int> OnSelectedIndexChanged;
+    public int SlotCount => slotCount;
 
-    // Initialize ToolbarSelector with the player's inventory
-    public void Initialize(Inventory inventory)
+    public int CurrentIndex { get; private set; } = 0;
+
+    public event Action<int> OnIndexChanged;    // new index
+
+    public void SetIndex(int idx, bool force = false)
     {
-        this.inventory = inventory;
-        NotifySelection();
+        idx = Mathf.Clamp(idx, 0, slotCount - 1);
+        if (!force && idx == CurrentIndex) return;
+
+        CurrentIndex = idx;
+        OnIndexChanged?.Invoke(CurrentIndex);
     }
 
-    // Update the selected slot
-    public void UpdateSelection(int newIndex)
-    {
-        selectedIndex = newIndex;
-        NotifySelection();
-    }
-
-    // Notify about the selection change
-    private void NotifySelection()
-    {
-        // Get the InventorySlot at the selected index and invoke the event
-        InventorySlot selectedSlot = inventory?.GetSlotAt(selectedIndex);
-        if (selectedSlot != null)
-        {
-            OnSelectedItemChanged?.Invoke(selectedSlot.item);
-        }
-        OnSelectedIndexChanged?.Invoke(selectedIndex);
-    }
-
-    // Get the count of toolbar slots
-    public int GetToolbarSlotCount() => toolbarSlotCount;
-
-    // Get the index of the selected slot
-    public int GetSelectedIndex() => selectedIndex;
-
-    // Get the selected InventoryItem (from the selected slot)
-    public InventoryItem GetSelectedItem()
-    {
-        InventorySlot selectedSlot = inventory?.GetSlotAt(selectedIndex);
-        return selectedSlot?.item;
-    }
+    public void Step(int delta) =>
+        SetIndex((CurrentIndex + delta + slotCount) % slotCount);
 }

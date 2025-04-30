@@ -10,8 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 3799127391379120385}
   - component: {fileID: 5221049199634102657}
-  - component: {fileID: 5652801710882925074}
   - component: {fileID: 2727685588199883164}
+  - component: {fileID: 8062315669808049093}
   m_Layer: 7
   m_Name: DroppedBow
   m_TagString: Untagged
@@ -62,23 +62,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &5652801710882925074
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8479374321405295830}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 341fdda4f50ff9d468e4e00082cb4365, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  inventorySlot:
-    item:
-      data: {fileID: 11400000, guid: 376270f88e941b74691e5e9c1e9a239a, type: 2}
-    quantity: 1
-  pickupEffect: {fileID: 0}
 --- !u!65 &2727685588199883164
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -100,6 +83,22 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.11, y: 1.2, z: 0.35}
   m_Center: {x: 0.03, y: 0, z: 0}
+--- !u!114 &8062315669808049093
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8479374321405295830}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6ef859df2dc289843bf91ff835af59ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  pickupEffect: {fileID: 0}
+  weaponData: {fileID: 11400000, guid: 376270f88e941b74691e5e9c1e9a239a, type: 2}
+  roundsInMag: 0
+  attachments: []
 --- !u!1001 &4879464932080153757
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -176,6 +175,14 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 7
       objectReference: {fileID: 0}
+    - target: {fileID: 5696494855991954268, guid: 95b8e3d9a4dc2ab46a9f8e7e042c94bb, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: d26a9ad1255ae174ea7ed86c28982a8c, type: 2}
+    - target: {fileID: 5768825423103491822, guid: 95b8e3d9a4dc2ab46a9f8e7e042c94bb, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: d26a9ad1255ae174ea7ed86c28982a8c, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

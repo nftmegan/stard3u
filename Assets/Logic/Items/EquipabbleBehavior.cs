@@ -1,33 +1,33 @@
+using Game.InventoryLogic;
 using UnityEngine;
-/// <summary>
-/// Implement this interface on any MonoBehaviour that needs access to an inventory (e.g., tools, weapons).
-/// It allows systems like EquipmentController to inject the owning inventory at runtime.
-/// </summary>
-public interface IInventoryUser
-{
-    void SetInventory(Inventory inventory);
-}
 
-public abstract class EquippableBehavior : MonoBehaviour, IItemInputReceiver, IInventoryUser
+public abstract class EquippableBehavior : MonoBehaviour, IItemInputReceiver, IEquippableInstance
 {
-    protected Inventory inventory;
+    protected InventoryItem runtimeItem;
+    protected ItemContainer ownerInventory;
 
-    public virtual void SetInventory(Inventory inventory)
+    public virtual void SetInventory(ItemContainer container)
     {
-        this.inventory = inventory;
+        ownerInventory = container;
     }
 
-    // Optionally override these in child classes
-    public virtual void OnFire1Down() {}
-    public virtual void OnFire1Hold() {}
-    public virtual void OnFire1Up() {}
+    public virtual void Initialize(InventoryItem itemInstance, ItemContainer ownerInventory)
+    {
+        this.runtimeItem = itemInstance;
+        this.ownerInventory = ownerInventory;
+    }
 
-    public virtual void OnFire2Down() {}
-    public virtual void OnFire2Hold() {}
-    public virtual void OnFire2Up() {}
+    // Input methods to override
+    public virtual void OnFire1Down()   { }
+    public virtual void OnFire1Hold()   { }
+    public virtual void OnFire1Up()     { }
 
-    public virtual void OnUtilityDown() {}
-    public virtual void OnUtilityUp() {}
+    public virtual void OnFire2Down()   { }
+    public virtual void OnFire2Hold()   { }
+    public virtual void OnFire2Up()     { }
 
-    public virtual void OnReloadDown() {}
+    public virtual void OnUtilityDown() { }
+    public virtual void OnUtilityUp()   { }
+
+    public virtual void OnReloadDown()  { }
 }

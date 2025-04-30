@@ -1,88 +1,87 @@
 using UnityEngine;
 
-public class InventoryUIManager : MonoBehaviour
+namespace UI.Inventory
 {
-    public PlayerInventory   playerInv;
-
-    [Header("UI References")]
-    [SerializeField] private InventoryItemUI itemPrefab;
-    [SerializeField] private Transform       toolbarParent;
-    [SerializeField] private Transform       bagParent;
-    [SerializeField] private Color           selectedColor = Color.yellow;
-    [SerializeField] private Color           normalColor   = Color.white;
-
-    public InventorySlotUI[] toolbarSlots;
-    public InventorySlotUI[] bagSlots;
-
-    /// <summary>
-    /// Call once after wiring references (e.g. from PlayerManager.Start).
-    /// </summary>
-    public void Initialize(PlayerInventory pi)
+    public class InventoryUIManager : MonoBehaviour
     {
-        print("INITIALIZED MOTHER ASDASDASDASDA");
+        [Header("Scene references")]
+        [SerializeField] private PlayerInventory playerInv;
+        [SerializeField] private Transform       toolbarParent;
+        [SerializeField] private Transform       bagParent;
+        [SerializeField] private Color           selectedColor = Color.yellow;
+        [SerializeField] private Color           normalColor   = Color.white;
+        [SerializeField] private ItemDetailUI    detailPanel;
 
+        [Header("Prefabs")]
+        [SerializeField] private SlotView slotPrefab;
 
-        playerInv = pi;
+        private SlotView[] toolbarViews;
+        private SlotView[] bagViews;
 
-        toolbarSlots = toolbarParent.GetComponentsInChildren<InventorySlotUI>(true);
-        bagSlots     = bagParent    .GetComponentsInChildren<InventorySlotUI>(true);
-
-        int total = toolbarSlots.Length + bagSlots.Length;
-        playerInv.ResizeInventory(total);
-
-        // assign indices and manager reference
-        for (int i = 0; i < toolbarSlots.Length; i++)
-            toolbarSlots[i].Setup(i, this);
-        for (int i = 0; i < bagSlots.Length; i++)
-            bagSlots[i].Setup(i + toolbarSlots.Length, this);
-
-        // subscribe
-        playerInv.GetInventory().OnInventoryChanged           += RefreshUI;
-        playerInv.GetToolbarSelector().OnSelectedIndexChanged += UpdateHighlight;
-
-        // initial draw
-        RefreshUI();
-        UpdateHighlight(playerInv.GetSelectedIndex());
-    }
-
-    /// <summary>Called by InventorySlotUI on a drop.</summary>
-    public void OnSlotDrop(int fromIndex, int toIndex)
-    {
-        playerInv.SwapItems(fromIndex, toIndex);
-        ForceRefreshUI();
-        playerInv.RefreshSelection(); // make equipment update if needed
-    }
-
-    public void RefreshUI()
-    {
-        var inv = playerInv.GetInventory();
-
-        for (int i = 0; i < toolbarSlots.Length; i++)
-            DrawSlot(toolbarSlots[i], inv.GetSlotAt(i));
-        for (int i = 0; i < bagSlots.Length; i++)
-            DrawSlot(bagSlots[i], inv.GetSlotAt(i + toolbarSlots.Length));
-    }
-
-    private void DrawSlot(InventorySlotUI ui, InventorySlot slot)
-    {
-        foreach (Transform c in ui.transform) Destroy(c.gameObject);
-
-        if (slot != null && slot.item != null && slot.quantity > 0)
+        /* ───────── initialise ───────── */
+        public void Initialize(PlayerInventory pi)
         {
-            var v = Instantiate(itemPrefab, ui.transform);
-            v.Initialize(slot.item.data.icon, slot.quantity, ui.GetSlotIndex());
+            playerInv = pi;
+
+            toolbarViews = toolbarParent.GetComponentsInChildren<SlotView>(true);
+            bagViews     = bagParent   .GetComponentsInChildren<SlotView>(true);
+
+            int idx = 0;
+            foreach (var v in toolbarViews) v.Setup(idx++, this);
+            foreach (var v in bagViews)     v.Setup(idx++, this);
+
+            playerInv.Resize(idx);
+
+            playerInv.Container.OnSlotChanged += UpdateSingleSlot;
+            playerInv.Toolbar.OnIndexChanged  += UpdateHighlight;
+
+            RedrawAll();
         }
-    }
 
-    private void UpdateHighlight(int idx)
-    {
-        for (int i = 0; i < toolbarSlots.Length; i++)
-            toolbarSlots[i].SetSelected(i == idx, selectedColor, normalColor);
-    }
+        /* ───────── external requests ───────── */
+        public void RequestMergeOrSwap(int from,int to) =>
+            playerInv.MergeOrSwap(from,to);
 
-    public void ForceRefreshUI()
-    {
-        RefreshUI();
-        UpdateHighlight(playerInv.GetSelectedIndex());
+        public void RequestInspect(int slot)
+        {
+            var s = playerInv.GetSlotAt(slot);
+            if (s?.item == null) return;
+            detailPanel.ShowFor(s.item, s.quantity, slot);
+        }
+
+        /* ───────── drawing helpers ───────── */
+        private void RedrawAll()
+        {
+            int toolLen = toolbarViews.Length;
+            for (int i=0;i<toolLen;i++)
+                Draw(toolbarViews[i], playerInv.GetSlotAt(i));
+            for (int i=0;i<bagViews.Length;i++)
+                Draw(bagViews[i], playerInv.GetSlotAt(i+toolLen));
+
+            UpdateHighlight(playerInv.GetEquippedIndex());               // new
+        }
+
+        private void UpdateSingleSlot(int idx)
+        {
+            int toolLen = toolbarViews.Length;
+            if (idx < toolLen)
+                Draw(toolbarViews[idx], playerInv.GetSlotAt(idx));
+            else
+                Draw(bagViews[idx-toolLen], playerInv.GetSlotAt(idx));
+        }
+
+        private void Draw(SlotView v, InventorySlot slot)
+        {
+            if (slot == null || slot.item == null || slot.quantity == 0)
+                v.DrawEmpty();
+            else
+                v.DrawStack(slot.item.data.icon, slot.quantity);
+        }
+
+        private void UpdateHighlight(int idx)
+        {
+            for (int i=0;i<toolbarViews.Length;i++)
+                toolbarViews[i].SetSelected(i==idx, selectedColor, normalColor);
+        }
     }
 }

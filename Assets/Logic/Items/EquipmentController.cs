@@ -1,144 +1,135 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Game.InventoryLogic;          // ItemContainer
+using UI.Inventory;                // InventoryItem
 
+/// <summary>
+/// Activates / deactivates weapon prefabs according to the player’s
+/// equipped hot-bar item and forwards input to them.
+/// </summary>
+[DisallowMultipleComponent]
 public class EquipmentController : MonoBehaviour
 {
+    /* ─────── Serialized fields ─────── */
     [Header("Equippable Item Holder")]
-    [SerializeField] private Transform itemHolder;
+    [SerializeField] private Transform itemHolder;           // children = prefabs
 
-    [Header("References")]
+    [Header("Animation")]
     [SerializeField] private EquipTransitionAnimator equipAnimator;
+
+    [Header("Fallback")]
     [SerializeField] private RuntimeEquippable fallbackHandsPrefab;
 
-    private PlayerManager playerManager;
+    /* ─────── runtime refs ─────── */
+    private PlayerManager   playerManager;
     private PlayerInventory playerInventory;
 
-    private readonly Dictionary<string, GameObject> itemPrefabByCode = new();
-    private GameObject currentItemObject;
-    private IItemInputReceiver currentInputReceiver;
-    private InventoryItem equippedInventoryItem;
-    private string currentlyEquippingItemCode = "";
+    private readonly Dictionary<string, RuntimeEquippable> prefabsByCode = new();
 
-    public InventoryItem EquippedItem => equippedInventoryItem;
+    private RuntimeEquippable currentRuntime;
+    private IItemInputReceiver currentInput;
+    private InventoryItem      equippedItem;
 
+    public InventoryItem EquippedItem => equippedItem;
+
+    /* ────────── Awake ────────── */
     private void Awake()
     {
-        playerManager = GetComponentInParent<PlayerManager>();
+        playerManager   = GetComponentInParent<PlayerManager>();
         playerInventory = playerManager?.GetInventory();
 
-        RegisterAllEquippableObjects();
+        RegisterPrefabs();
     }
 
-    private void Start()
+    private void OnEnable()
     {
         if (playerInventory != null)
-        {
-            playerInventory.OnSelectedItemChanged += TryEquipItem;
-        }
+            playerInventory.OnEquippedItemChanged += OnEquipRequest;
     }
 
-    private void OnDestroy()
+    private void OnDisable()
     {
         if (playerInventory != null)
-        {
-            playerInventory.OnSelectedItemChanged -= TryEquipItem;
-        }
+            playerInventory.OnEquippedItemChanged -= OnEquipRequest;
     }
 
-    private void RegisterAllEquippableObjects()
+    /* ────────── Prefab registry ────────── */
+    private void RegisterPrefabs()
     {
-        itemPrefabByCode.Clear();
-
-        if (itemHolder == null)
-        {
-            Debug.LogError("[EquipmentController] itemHolder is not assigned.");
-            return;
-        }
+        prefabsByCode.Clear();
 
         foreach (Transform child in itemHolder)
         {
-            if (child.TryGetComponent(out RuntimeEquippable runtime))
+            if (child.TryGetComponent(out RuntimeEquippable eq))
             {
-                string code = runtime.GetItemCode();
-                if (!string.IsNullOrEmpty(code))
-                {
-                    itemPrefabByCode[code] = child.gameObject;
-                    child.gameObject.SetActive(false);
-                    Debug.Log($"[EquipmentController] Registered equippable: {code}");
-                }
+                prefabsByCode[eq.ItemCode] = eq;
+                child.gameObject.SetActive(false);
             }
         }
 
-        if (fallbackHandsPrefab != null && !itemPrefabByCode.ContainsKey(fallbackHandsPrefab.GetItemCode()))
+        if (fallbackHandsPrefab != null &&
+            !prefabsByCode.ContainsKey(fallbackHandsPrefab.ItemCode))
         {
-            itemPrefabByCode[fallbackHandsPrefab.GetItemCode()] = fallbackHandsPrefab.gameObject;
+            prefabsByCode[fallbackHandsPrefab.ItemCode] = fallbackHandsPrefab;
             fallbackHandsPrefab.gameObject.SetActive(false);
-            Debug.Log($"[EquipmentController] Registered fallback hands prefab: {fallbackHandsPrefab.GetItemCode()}");
         }
     }
 
+    /* ────────── Input passthrough ────────── */
     public void HandleInput(IPlayerInput input)
     {
-        if (equipAnimator.IsPlaying || currentInputReceiver == null) return;
+        if (equipAnimator.IsPlaying || currentInput == null) return;
 
-        if (input.Fire1Down) currentInputReceiver.OnFire1Down();
-        if (input.Fire1Hold) currentInputReceiver.OnFire1Hold();
-        if (input.Fire1Up) currentInputReceiver.OnFire1Up();
+        if (input.Fire1Down)   currentInput.OnFire1Down();
+        if (input.Fire1Hold)   currentInput.OnFire1Hold();
+        if (input.Fire1Up)     currentInput.OnFire1Up();
 
-        if (input.Fire2Down) currentInputReceiver.OnFire2Down();
-        if (input.Fire2Hold) currentInputReceiver.OnFire2Hold();
-        if (input.Fire2Up) currentInputReceiver.OnFire2Up();
+        if (input.Fire2Down)   currentInput.OnFire2Down();
+        if (input.Fire2Hold)   currentInput.OnFire2Hold();
+        if (input.Fire2Up)     currentInput.OnFire2Up();
 
-        if (input.UtilityDown) currentInputReceiver.OnUtilityDown();
-        if (input.UtilityUp) currentInputReceiver.OnUtilityUp();
+        if (input.UtilityDown) currentInput.OnUtilityDown();
+        if (input.UtilityUp)   currentInput.OnUtilityUp();
 
-        if (input.ReloadDown) currentInputReceiver.OnReloadDown();
+        if (input.ReloadDown)  currentInput.OnReloadDown();
     }
 
-    private void TryEquipItem(InventoryItem item)
+    /* ────────── Equip flow ────────── */
+    private void OnEquipRequest(InventoryItem item)
     {
-        if (item == equippedInventoryItem)
-            return; // same item, skip
-
-        EquipSelectedItem(item);
+        if (item == equippedItem) return;   // already equipped
+        Equip(item);
     }
 
-    private void EquipSelectedItem(InventoryItem item)
+    private void Equip(InventoryItem item)
     {
-        string itemCode = item?.data?.itemCode ?? fallbackHandsPrefab?.GetItemCode();
+        string code = item?.data?.itemCode ?? fallbackHandsPrefab.ItemCode;
 
-        if (string.IsNullOrEmpty(itemCode) || !itemPrefabByCode.TryGetValue(itemCode, out var prefab))
-        {
-            Debug.LogWarning($"[EquipmentController] No prefab found for '{itemCode}', falling back to hands.");
-            prefab = fallbackHandsPrefab?.gameObject;
-        }
+        if (!prefabsByCode.TryGetValue(code, out var runtime))
+            runtime = fallbackHandsPrefab;
 
-        if (currentItemObject != null)
-            currentItemObject.SetActive(false);
+        /* deactivate previous */
+        if (currentRuntime) currentRuntime.gameObject.SetActive(false);
 
-        currentItemObject = prefab;
-        currentInputReceiver = prefab?.GetComponent<IItemInputReceiver>();
-        equippedInventoryItem = item;
-        currentlyEquippingItemCode = itemCode;
+        currentRuntime = runtime;
+        currentRuntime.gameObject.SetActive(true);
 
-        prefab?.SetActive(true);
-        Debug.Log($"[EquipmentController] Equipped '{itemCode}'.");
+        /* inject runtime data */
+        if (runtime.TryGetComponent(out IEquippableInstance eq))
+            eq.Initialize(item, playerInventory.Container);
 
-        if (equipAnimator != null)
-        {
-            equipAnimator.Play(() =>
-            {
-                Debug.Log($"[EquipmentController] Equip animation finished for '{itemCode}'.");
-            });
-        }
+        /* cache input receiver */
+        currentInput = runtime.GetComponent<IItemInputReceiver>();
+
+        equippedItem = item;
+
+        /* optional animation */
+        if (equipAnimator) equipAnimator.Play(null);
     }
 
-    public void SetForceSlowWalk(bool value)
-    {
-        playerManager?.SetSlowWalk(value);
-    }
+    /* ────────── helpers ────────── */
+    public void SetForceSlowWalk(bool enabled) =>
+        playerManager?.SetSlowWalk(enabled);
 
     public PlayerInventory GetPlayerInventory() => playerInventory;
-    public GameObject GetCurrentItemObject() => currentItemObject;
-    public IItemInputReceiver GetCurrentInputReceiver() => currentInputReceiver;
 }

@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 2906282666123248027}
   - component: {fileID: 74089614953666337}
   - component: {fileID: 4650725079847237674}
-  - component: {fileID: 7454501975247607347}
+  - component: {fileID: 3805624705326962589}
   m_Layer: 7
   m_Name: WoodenArrowProjectile
   m_TagString: Untagged
@@ -199,7 +199,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.19, y: 0.19, z: 1.24}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &7454501975247607347
+--- !u!114 &3805624705326962589
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -208,14 +208,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1838343255085318204}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 341fdda4f50ff9d468e4e00082cb4365, type: 3}
+  m_Script: {fileID: 11500000, guid: 00228af0a077baa46a879b96ce15ed55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  inventorySlot:
-    item:
-      data: {fileID: 11400000, guid: 546f006dab205fc44a996ff684c0f0b1, type: 2}
-    quantity: 1
   pickupEffect: {fileID: 0}
+  itemData: {fileID: 11400000, guid: 546f006dab205fc44a996ff684c0f0b1, type: 2}
+  quantity: 1
 --- !u!1001 &3399774880245996198
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -276,6 +274,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: c514a67c2e2e14a4e817083e6c5f0da8, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: d26a9ad1255ae174ea7ed86c28982a8c, type: 2}
     - target: {fileID: 919132149155446097, guid: c514a67c2e2e14a4e817083e6c5f0da8, type: 3}
       propertyPath: m_Name
       value: Mesh

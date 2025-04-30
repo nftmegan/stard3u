@@ -1,93 +1,87 @@
 using UnityEngine;
+using Game.InventoryLogic;   // ItemContainer
 
 public class BowBehavior : EquippableBehavior
 {
     private IAimProvider aimProvider;
-    private bool isPulling = false;
-    private bool isCooldown = false;
-    private bool isHoldingRightClick = false;
 
-    private float pullTime = 0f;
-    private float currentPullForce = 0f;
+    private bool  isPulling            = false;
+    private bool  isCooldown           = false;
+    private bool  isHoldingRightClick  = false;
+    private float pullTime             = 0f;
+    private float currentPullForce     = 0f;
 
     [Header("Bow Settings")]
-    [SerializeField] private float maxPullTime = 1.5f;
-    [SerializeField] private float minShootThreshold = 0.85f;
-    [SerializeField] private float baseShootForce = 40f;
-    [SerializeField] private float shotCooldown = 0.5f;
+    [SerializeField] private float maxPullTime       = 1.5f;
+    [SerializeField] private float minShootThreshold= 0.85f;
+    [SerializeField] private float baseShootForce   = 40f;
+    [SerializeField] private float shotCooldown     = 0.5f;
 
     [Header("References")]
-    [SerializeField] private EquipmentController equipment;
-    [SerializeField] private Transform arrowSpawnPoint;
-    [SerializeField] private BowDrawEffect drawEffect;
-    [SerializeField] private BowAudioHandler audioHandler;
-    [SerializeField] private BowArrowVisualEffect arrowVisualEffect;
+    [SerializeField] private EquipmentController   equipment;
+    [SerializeField] private Transform             arrowSpawnPoint;
+    [SerializeField] private BowDrawEffect         drawEffect;
+    [SerializeField] private BowAudioHandler       audioHandler;
+    [SerializeField] private BowArrowVisualEffect  arrowVisualEffect;
 
     [Header("Ammo Settings")]
-    [SerializeField] private ArrowItemData requiredArrowData; // Reference to the arrow type
+    [SerializeField] private ArrowItemData requiredArrowData;
 
+    private PlayerInventory playerInventory;
+
+    /* ────────────────────────── Lifecycle ───────────────────────── */
     private void Awake()
     {
-        aimProvider = GetComponentInParent<IAimProvider>();
-        equipment = GetComponentInParent<EquipmentController>();
+        aimProvider        = GetComponentInParent<IAimProvider>();
+        equipment          = GetComponentInParent<EquipmentController>();
+        playerInventory    = equipment?.GetPlayerInventory();
 
-        drawEffect = GetComponent<BowDrawEffect>();
-        audioHandler = GetComponent<BowAudioHandler>();
-        arrowVisualEffect = GetComponent<BowArrowVisualEffect>();
+        drawEffect         = GetComponent<BowDrawEffect>();
+        audioHandler       = GetComponent<BowAudioHandler>();
+        arrowVisualEffect  = GetComponent<BowArrowVisualEffect>();
         arrowVisualEffect?.SetArrowVisibility(false);
     }
 
     private void Update()
     {
-        if (isPulling)
-        {
-            pullTime += Time.deltaTime;
-            currentPullForce = Mathf.Clamp01(pullTime / maxPullTime);
+        if (!isPulling) return;
 
-            drawEffect?.UpdateDraw(currentPullForce);
-            arrowVisualEffect?.UpdateDraw(currentPullForce);
+        pullTime        += Time.deltaTime;
+        currentPullForce = Mathf.Clamp01(pullTime / maxPullTime);
 
-            if (currentPullForce >= minShootThreshold)
-                audioHandler?.StartLoop();
-        }
+        drawEffect?.UpdateDraw(currentPullForce);
+        arrowVisualEffect?.UpdateDraw(currentPullForce);
+
+        if (currentPullForce >= minShootThreshold)
+            audioHandler?.StartLoop();
     }
 
+    /* ────────────────────────── Input events ────────────────────── */
     public override void OnFire2Down()
     {
         isHoldingRightClick = true;
-
-        if (!isPulling && !isCooldown)
-            TryStartPull();
+        if (!isPulling && !isCooldown) TryStartPull();
     }
 
     public override void OnFire2Up()
     {
         isHoldingRightClick = false;
-
-        if (isPulling)
-            CancelPull();
+        if (isPulling) CancelPull();
     }
 
     public override void OnFire1Down()
     {
         if (isPulling && currentPullForce >= minShootThreshold)
-        {
             Shoot(currentPullForce);
-        }
     }
 
+    /* ────────────────────────── Pull logic ─────────────────────── */
     private void TryStartPull()
     {
-        if (equipment == null || requiredArrowData == null)
+        if (equipment == null || requiredArrowData == null || playerInventory == null)
             return;
 
-        var inventory = equipment.GetPlayerInventory();
-        if (inventory == null)
-            return;
-
-        // Check if there's ammo available in the inventory
-        InventorySlot arrowSlot = inventory.GetSlotWithItem(requiredArrowData);
-        if (arrowSlot == null || arrowSlot.quantity <= 0)
+        if (!HasArrow(playerInventory.Container))   // only scan, don’t consume
         {
             Debug.Log("[Bow] No required arrows available.");
             return;
@@ -98,36 +92,34 @@ public class BowBehavior : EquippableBehavior
 
     private void StartPull()
     {
-        isPulling = true;
-        pullTime = 0f;
+        isPulling        = true;
+        pullTime         = 0f;
         currentPullForce = 0f;
 
         equipment?.SetForceSlowWalk(true);
-
         audioHandler?.PlayDrawStart();
         arrowVisualEffect?.SetArrowVisibility(true);
     }
 
     private void CancelPull()
     {
-        isPulling = false;
-        pullTime = 0f;
+        isPulling        = false;
+        pullTime         = 0f;
         currentPullForce = 0f;
 
         equipment?.SetForceSlowWalk(false);
-
         drawEffect?.StopDraw();
         audioHandler?.StopLoop();
         arrowVisualEffect?.SetArrowVisibility(false);
         arrowVisualEffect?.UpdateDraw(0f);
     }
 
+    /* ────────────────────────── Shooting ───────────────────────── */
     private void Shoot(float normalizedPower)
     {
-        isPulling = false;
-        pullTime = 0f;
+        isPulling        = false;
+        pullTime         = 0f;
         currentPullForce = 0f;
-
         equipment?.SetForceSlowWalk(false);
 
         drawEffect?.StopDraw();
@@ -136,29 +128,26 @@ public class BowBehavior : EquippableBehavior
         arrowVisualEffect?.SetArrowVisibility(false);
         arrowVisualEffect?.UpdateDraw(0f);
 
-        // Ensure ammo is available before shooting
-        var inventory = equipment.GetPlayerInventory();
-        var arrowSlot = inventory?.GetSlotWithItem(requiredArrowData);
-        
-        if (arrowSlot == null || arrowSlot.quantity <= 0)
+        // Ensure an arrow is actually available now
+        if (!playerInventory.TryConsume(requiredArrowData))        // consumes 1
         {
-            Debug.LogWarning("[Bow] No arrows left in inventory to shoot.");
+            Debug.LogWarning("[Bow] No arrows left to shoot.");
             return;
         }
 
-        // Create the projectile
+        // Spawn projectile
         Vector3 targetPoint = aimProvider.GetAimHitPoint();
-        Vector3 direction = (targetPoint - arrowSpawnPoint.position).normalized;
+        Vector3 dir         = (targetPoint - arrowSpawnPoint.position).normalized;
 
-        var projectileInstance = Instantiate(requiredArrowData.projectilePrefab, arrowSpawnPoint.position, Quaternion.LookRotation(direction));
-        projectileInstance.Launch(direction, baseShootForce * normalizedPower);
-
-        // Consume one arrow from the inventory
-        inventory?.TryConsumeItem(requiredArrowData);
+        var proj = Instantiate(requiredArrowData.projectilePrefab,
+                               arrowSpawnPoint.position,
+                               Quaternion.LookRotation(dir));
+        proj.Launch(dir, baseShootForce * normalizedPower);
 
         StartCooldown();
     }
 
+    /* ────────────────────────── Cooldown ───────────────────────── */
     private void StartCooldown()
     {
         isCooldown = true;
@@ -168,16 +157,25 @@ public class BowBehavior : EquippableBehavior
     private void EndCooldown()
     {
         isCooldown = false;
-
-        if (isHoldingRightClick)
-        {
-            TryStartPull();
-        }
+        if (isHoldingRightClick) TryStartPull();
     }
 
-    public override void OnFire1Hold() { }
-    public override void OnFire1Up() { }
-    public override void OnUtilityDown() { }
-    public override void OnUtilityUp() { }
+    /* ────────────────────────── Helpers ────────────────────────── */
+    private bool HasArrow(ItemContainer c)
+    {
+        for (int i = 0; i < c.Size; i++)
+        {
+            var s = c[i];
+            if (s.item != null && s.item.data == requiredArrowData && s.quantity > 0)
+                return true;
+        }
+        return false;
+    }
+
+    /* unused overrides */
+    public override void OnFire1Hold()  { }
+    public override void OnFire1Up()    { }
+    public override void OnUtilityDown(){ }
+    public override void OnUtilityUp()  { }
     public override void OnReloadDown() { }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using KinematicCharacterController;
 
 [RequireComponent(typeof(AudioSource))]
 public class FootstepController : MonoBehaviour
@@ -12,30 +13,31 @@ public class FootstepController : MonoBehaviour
     public float minSpeedToStep = 0.1f;
 
     private AudioSource audioSource;
-    private CharacterMotor motor;
+    private MyCharacterController characterController;
 
     private float stepTimer;
     private int lastPlayedIndex = -1;
     private bool wasGroundedLastFrame = true;
 
-    void Awake()
+    private void Awake()
     {
         audioSource = GetComponent<AudioSource>();
-        motor = GetComponent<CharacterMotor>();
+        characterController = GetComponent<MyCharacterController>();
     }
 
-    void Update()
+    private void Update()
     {
-        if (motor == null || footstepClips == null || footstepClips.Length == 0)
+        if (characterController == null || footstepClips == null || footstepClips.Length == 0)
             return;
 
-        bool isGrounded = motor.IsGrounded;
-        float horizontalSpeed = new Vector3(motor.CurrentVelocity.x, 0f, motor.CurrentVelocity.z).magnitude;
+        bool isGrounded = characterController.Motor.GroundingStatus.IsStableOnGround;
+        Vector3 velocity = characterController.Velocity;
+        float horizontalSpeed = new Vector3(velocity.x, 0f, velocity.z).magnitude;
 
         // LANDING SOUND
         if (!wasGroundedLastFrame && isGrounded)
         {
-            PlayFootstep(horizontalSpeed);
+            PlayFootstep();
         }
 
         // REGULAR FOOTSTEPS
@@ -46,7 +48,7 @@ public class FootstepController : MonoBehaviour
             stepTimer += Time.deltaTime;
             if (stepTimer >= dynamicInterval)
             {
-                PlayFootstep(horizontalSpeed);
+                PlayFootstep();
                 stepTimer = 0f;
             }
         }
@@ -58,7 +60,7 @@ public class FootstepController : MonoBehaviour
         wasGroundedLastFrame = isGrounded;
     }
 
-    private void PlayFootstep(float speed)
+    private void PlayFootstep()
     {
         if (footstepClips.Length == 0)
             return;

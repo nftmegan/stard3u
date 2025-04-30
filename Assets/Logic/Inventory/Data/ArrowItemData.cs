@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "NewArrowItem", menuName = "Items/Arrow Item")]
+[CreateAssetMenu(fileName = "NewArrowItem", menuName = "Items/Arrow")]
 public class ArrowItemData : ItemData
 {
     [Header("Arrow Settings")]

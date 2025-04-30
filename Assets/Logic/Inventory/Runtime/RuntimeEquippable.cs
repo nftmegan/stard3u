@@ -1,29 +1,19 @@
 using UnityEngine;
+using Game.InventoryLogic;
 
-public class RuntimeEquippable : MonoBehaviour, IRuntimeItem
+[DisallowMultipleComponent]
+public sealed class RuntimeEquippable : MonoBehaviour
 {
-    [SerializeField] private string itemCode;
-    public InventoryItem runtimeInventoryItem;
+    [SerializeField] private string itemCode;     // matches ItemData.itemCode
 
-    public string GetItemCode() => itemCode;
+    private IEquippableInstance instance;        // cached target script
 
-    public ItemData GetItemData() => runtimeInventoryItem?.data;
+    private void Awake() =>
+        instance = GetComponent<IEquippableInstance>();
 
-    public void SetItemData(ItemData itemData)
-    {
-        runtimeInventoryItem = new InventoryItem
-        {
-            data = itemData
-        };
-    }
+    public string  ItemCode => itemCode;
 
-    public void SetInventoryItem(InventoryItem inventoryItem)
-    {
-        runtimeInventoryItem = inventoryItem;
-    }
-
-    public InventoryItem GetInventoryItem()
-    {
-        return runtimeInventoryItem;
-    }
+    /// Called by EquipmentController right after SetActive(true)
+    public void Initialize(InventoryItem runtimeItem, ItemContainer playerInv)
+        => instance?.Initialize(runtimeItem, playerInv);
 }

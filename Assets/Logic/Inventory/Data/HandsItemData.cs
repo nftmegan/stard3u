@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[CreateAssetMenu(menuName = "Items/Hands Item Data")]
+[CreateAssetMenu(fileName = "NewHandsItem", menuName = "Items/Hands")]
 public class HandsItemData : ItemData
 {
     // Optional: define special stats for hands

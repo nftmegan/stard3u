@@ -1,170 +1,148 @@
 using System.Collections;
+using Game.InventoryLogic;
 using UnityEngine;
 
+/// <summary>
+/// Base class for any firearm (pistol, rifle, SMG …).
+/// It pulls static data from <see cref="FireArmItemData"/> and
+/// per-instance state (magazine, attachments, durability) from
+/// the <see cref="FirearmState"/> payload stored inside the
+/// <see cref="InventoryItem"/> passed by <see cref="EquipmentController"/>.
+/// </summary>
 public abstract class FirearmBehavior : EquippableBehavior
 {
-    [Header("Firearm Settings")]
-    public bool isAuto = false;
-    public float fireRate = 0.1f;       // Delay between auto‐shots
-    public float shotCooldown = 0.5f;   // Minimum delay between semi‐auto taps
+    /* ─── Cached static + runtime refs ───────────────────────── */
+    private FireArmItemData def;      // static definition (ScriptableObject)
+    private FirearmState    state;    // per-instance runtime payload
 
-    [Header("Ammo Settings")]
-    [Tooltip("How many rounds this magazine can hold")]
-    public int maxBullets = 12;
-    [Tooltip("The magazine slot that will be filled on reload and drained on fire")]
-    public InventorySlot magazineSlot;
+    private IAimProvider aimProvider;
+    private Coroutine    reloadRoutine;
 
-    private bool isCooldown  = false;
-    private bool isFiring    = false;
-    private bool isReloading = false;
+    private bool  isCooldown;
+    private bool  isReloading;
     private float lastShotTime;
-    private Coroutine reloadRoutine;          // ← keep handle
 
+    /* ─── Quick access properties ───────────────────────────── */
+    private int   MaxBullets => def.magazineSize;
+    private float TapDelay   => def.shotCooldown;
+    private float AutoDelay  => 1f / def.fireRate;
+    private bool  IsAuto     => def.fireMode == FireMode.Auto;
+    public  int   CurrentAmmo => state.magazine[0].quantity;
+
+    /* ─── Inspector refs ────────────────────────────────────── */
     [Header("References")]
-    [SerializeField] protected EquipmentController   equipment;
-    [SerializeField] protected Transform             firePoint;
-    [SerializeField] protected FirearmAudioHandler   audioHandler;
-    [SerializeField] protected ProjectileItemData    projectileData;
+    [SerializeField] protected Transform           firePoint;
+    [SerializeField] protected FirearmAudioHandler audioHandler;
+    [SerializeField] protected RecoilHandler recoilHandler;
+    [SerializeField] protected MuzzleFlashHandler muzzleHandler;
 
-    /// <summary>
-    /// How many rounds remain in the magazine right now.
-    /// </summary>
-    public int CurrentAmmo => magazineSlot != null ? magazineSlot.quantity : 0;
-
-    protected virtual void Awake()
+    /* ─── Initialise (called by EquipmentController) ────────── */
+    public override void Initialize(InventoryItem inv, ItemContainer ownerInv)
     {
-        audioHandler = GetComponent<FirearmAudioHandler>();
-        // Do NOT populate magazineSlot.item here.
-        // Leave it null until real Reload() is called.
+        base.Initialize(inv, ownerInv);
+
+        def   = inv.data    as FireArmItemData;
+        state = inv.runtime as FirearmState;
+
+        if (def == null || state == null)
+            Debug.LogError($"{name} equipped with wrong ItemData or payload!");
     }
 
+    /* ─── Unity lifecycle ───────────────────────────────────── */
+    protected virtual void Awake()
+    {
+        aimProvider  = GetComponentInParent<IAimProvider>();
+    }
+
+    /* ─── Input ------------------------------------------------ */
     public override void OnFire1Down()
     {
-        if (isCooldown || isReloading || CurrentAmmo <= 0)
-            return;
+        if (isCooldown || isReloading) return;
 
-        isFiring = true;
-        if (isAuto)
-            StartCoroutine(AutoFire());
-        else
-            SingleFire();
+        SingleFire();
     }
 
     public override void OnFire1Up()
-    {
-        isFiring = false;
-        if (isAuto)
-            StopAllCoroutines();
+    {   
+
     }
 
+    /* ─── Shooting logic ────────────────────────────────────── */
     private void SingleFire()
     {
-        if (Time.time - lastShotTime < shotCooldown || CurrentAmmo <= 0)
-            return;
+        if (Time.time - lastShotTime < TapDelay) return;
 
-        Shoot();
-        ConsumeRound();
+        if(CurrentAmmo <= 0) {
+            audioHandler?.PlayDryFire();            
+        }
+        else {
+            Shoot();
+            ConsumeRound();
+        }
+
         lastShotTime = Time.time;
         StartCooldown();
     }
 
-    private IEnumerator AutoFire()
-    {
-        while (isFiring && CurrentAmmo > 0)
-        {
-            if (Time.time - lastShotTime >= fireRate)
-            {
-                Shoot();
-                ConsumeRound();
-                lastShotTime = Time.time;
-                StartCooldown();
-            }
-            yield return null;
-        }
-    }
-
-    /// <summary>
-    /// Spawns the projectile and plays firing SFX.
-    /// </summary>
     protected virtual void Shoot()
     {
-        if (projectileData == null || firePoint == null) return;
+        var projItemData = state.magazine[0].item.data as ProjectileItemData;
+        var projPrefab = projItemData.projectilePrefab;
+        
+        if (!projPrefab || !firePoint) return;
 
-        var proj = Instantiate(
-            projectileData.projectilePrefab,
-            firePoint.position,
-            firePoint.rotation
-        );
-        proj.Launch(firePoint.forward, projectileData.baseShootForce);
+        Vector3 target = aimProvider.GetAimHitPoint();
+        Vector3 dir    = (target - firePoint.position).normalized;
+
+        var proj = Instantiate(projPrefab,
+                               firePoint.position,
+                               Quaternion.LookRotation(dir));
+
+        proj.Launch(dir, projItemData.baseShootForce);
 
         audioHandler?.PlayShootSound();
+        muzzleHandler?.Muzzle();
+        recoilHandler?.ApplyRecoil();
     }
 
-    private void ConsumeRound()
-    {
-        magazineSlot.ReduceQuantity(1);
-    }
+    private void ConsumeRound() => state.magazine[0].ReduceQuantity(1);
 
+    /* ─── Cool-down ─────────────────────────────────────────── */
     private void StartCooldown()
     {
         isCooldown = true;
-        Invoke(nameof(EndCooldown), shotCooldown);
+        Invoke(nameof(EndCooldown), TapDelay);
     }
+    private void EndCooldown() => isCooldown = false;
 
-    private void EndCooldown()
+    /* ─── Reload ------------------------------------------------ */
+    public override void OnReloadDown() => Reload();
+
+    private void Reload()
     {
-        isCooldown = false;
-    }
-
-    // ——— RELOAD ———
-
-    public void Reload()
-    {
-        if (isReloading || CurrentAmmo >= maxBullets) return;
-
-        // restart if user spam-clicked reload
-        if (reloadRoutine != null)
-            StopCoroutine(reloadRoutine);
-
+        if (isReloading || CurrentAmmo >= MaxBullets) return;
+        if (reloadRoutine != null) StopCoroutine(reloadRoutine);
         reloadRoutine = StartCoroutine(ReloadCoroutine());
     }
 
-private IEnumerator ReloadCoroutine()
+    private IEnumerator ReloadCoroutine()
     {
         isReloading = true;
+        yield return new WaitForSeconds(0.5f);     // play SFX / anim here
 
-        // play SFX and wait for its duration or a fallback 1.5 s
-        //float sfxLen = audioHandler != null ? audioHandler.PlayReload() : 0f;
-        yield return new WaitForSeconds(0.5f);
-
-        var inv = equipment.GetPlayerInventory();
-        if (inv != null && projectileData != null)
-        {
-            int needed = maxBullets - CurrentAmmo;
-            inv.Withdraw(projectileData, needed, magazineSlot);
-        }
+        int need = MaxBullets - CurrentAmmo;
+        ownerInventory.Withdraw(def.ammoType, need, state.magazine[0]);
 
         isReloading  = false;
         reloadRoutine = null;
     }
 
-    public override void OnReloadDown()
-    {
-        Reload();
-    }
-
+    /* ─── Util ------------------------------------------------- */
     public override void OnUtilityDown() { }
     public override void OnUtilityUp()   { }
 
     protected virtual void OnDisable()
     {
-        // weapon was holstered – abort reload so we can later start a new one
-        if (reloadRoutine != null)
-        {
-            StopCoroutine(reloadRoutine);
-            reloadRoutine = null;
-        }
         isReloading = false;
-        isFiring    = false;
     }
 }
