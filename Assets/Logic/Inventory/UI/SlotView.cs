@@ -3,132 +3,100 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace UI.Inventory
+// Removed namespace
+
+[RequireComponent(typeof(CanvasGroup))]
+internal class SlotView : MonoBehaviour,
+                            IBeginDragHandler, IDragHandler, IEndDragHandler,
+                            IDropHandler,    IPointerClickHandler
 {
-    [RequireComponent(typeof(CanvasGroup))]   // still useful for blocking raycasts
-    internal class SlotView : MonoBehaviour,
-                              IBeginDragHandler, IDragHandler, IEndDragHandler,
-                              IDropHandler,    IPointerClickHandler
+    [Header("Visuals")]
+    [SerializeField] private Image backgroundImage;
+    [SerializeField] private Image iconImage;
+    [SerializeField] private Text  quantityText;
+
+    [Header("Runtime")]
+    [SerializeField] private int slotIndex;
+
+    // References
+    private InventoryUIManager ui;
+    private Canvas             rootCanvas;
+    private CanvasGroup        cg;
+
+    // Drag state
+    private GameObject dragGhost;
+    private Color      iconOrigColor;
+    private Color      txtOrigColor;
+
+    // REMOVED: Static DraggingChanged event
+
+    internal void Setup(int idx, InventoryUIManager manager) { slotIndex = idx; ui = manager; }
+
+    private void Awake()
     {
-        [Header("Visuals")]
-        [SerializeField] private Image backgroundImage;
-        [SerializeField] private Image iconImage;
-        [SerializeField] private Text  quantityText;
+        rootCanvas = GetComponentInParent<Canvas>();
+        cg = GetComponent<CanvasGroup>();
+        if (cg == null) cg = gameObject.AddComponent<CanvasGroup>();
+        if (iconImage == null) Debug.LogError($"SlotView ({gameObject.name}) missing Icon Image!", this);
+        if (quantityText == null) Debug.LogError($"SlotView ({gameObject.name}) missing Quantity Text!", this);
+        if (rootCanvas == null) Debug.LogError($"SlotView ({gameObject.name}) missing parent Canvas!", this);
+    }
 
-        [Header("Runtime")]
-        [SerializeField] private int slotIndex;
+    // Drawing methods (DrawEmpty, DrawStack, SetSelected) remain the same...
+    internal void DrawEmpty() { if (iconImage) { iconImage.sprite = null; iconImage.enabled = false; iconImage.raycastTarget = false; } if(quantityText) { quantityText.enabled = false; quantityText.text = ""; } }
+    internal void DrawStack(Sprite icon, int qty) { if (iconImage) { iconImage.sprite = icon; iconImage.enabled = true; iconImage.raycastTarget = true; } else return; if(quantityText) { bool show = qty > 1; quantityText.enabled = show; quantityText.text = show ? qty.ToString() : ""; } }
+    internal void SetSelected(bool isSelected, Color selectedColor, Color normalColor) { if(backgroundImage) backgroundImage.color = isSelected ? selectedColor : normalColor; }
 
-        private InventoryUIManager ui;
-        private Canvas             rootCanvas;
-        private CanvasGroup        cg;
 
-        /* ─────────────────────── wiring ─────────────────────────────── */
-        internal void Setup(int idx, InventoryUIManager m)
-        {
-            slotIndex = idx;
-            ui        = m;
-        }
+    // --- Drag and Drop Handlers ---
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        if (!iconImage || !iconImage.enabled || !iconImage.sprite || rootCanvas == null) return;
 
-        private void Awake()
-        {
-            rootCanvas = GetComponentInParent<Canvas>();
-            cg         = GetComponent<CanvasGroup>();
-        }
+        // Create Ghost (same as before)
+        dragGhost = new GameObject("DragGhost", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
+        var rt  = dragGhost.GetComponent<RectTransform>();
+        var img = dragGhost.GetComponent<Image>();
+        var ghostCg = dragGhost.GetComponent<CanvasGroup>();
+        img.sprite = iconImage.sprite; img.raycastTarget = false; ghostCg.blocksRaycasts = false; ghostCg.ignoreParentGroups = true;
+        rt.SetParent(rootCanvas.transform, false); rt.SetAsLastSibling(); rt.sizeDelta = this.GetComponent<RectTransform>().sizeDelta; rt.position = eventData.position;
 
-        /* ─────────────────────── drawing helpers ────────────────────── */
-        internal void DrawEmpty()
-        {
-            iconImage.enabled        = false;
-            iconImage.raycastTarget  = false;
-            quantityText.enabled     = false;
-            quantityText.text        = "";
-        }
+        // Fade Original (same as before)
+        iconOrigColor = iconImage.color; txtOrigColor = quantityText.color;
+        var halfAlphaIcon = iconOrigColor; halfAlphaIcon.a *= 0.5f; var halfAlphaText = txtOrigColor; halfAlphaText.a *= 0.5f;
+        iconImage.color = halfAlphaIcon; if (quantityText.enabled) quantityText.color = halfAlphaText;
+        cg.blocksRaycasts = false;
 
-        internal void DrawStack(Sprite icon, int qty)
-        {
-            iconImage.sprite        = icon;
-            iconImage.enabled       = true;
-            iconImage.raycastTarget = true;
+        // --- Call CursorController Directly ---
+        CursorController.Instance.SetDragging(true);
+        // --- End Call ---
+    }
 
-            quantityText.enabled    = qty > 1;
-            quantityText.text       = qty > 1 ? qty.ToString() : "";
-        }
+    public void OnDrag(PointerEventData eventData) { if (dragGhost) dragGhost.transform.position = eventData.position; }
 
-        internal void SetSelected(bool sel, Color selCol, Color normCol) =>
-            backgroundImage.color = sel ? selCol : normCol;
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        // Clean up Ghost (same as before)
+        if (dragGhost) Destroy(dragGhost); dragGhost = null;
 
-        /* ─────────────────────── drag / drop ────────────────────────── */
-        private GameObject dragGhost;
-        private Color      iconOrig;
-        private Color      txtOrig;
+        // Restore Original (same as before)
+        if(iconImage) iconImage.color = iconOrigColor; if(quantityText) quantityText.color = txtOrigColor; if (cg != null) cg.blocksRaycasts = true;
 
-        public static event Action<bool> DraggingChanged;
+        // --- Call CursorController Directly ---
+        CursorController.Instance.SetDragging(false);
+        // --- End Call ---
+    }
 
-        public void OnBeginDrag(PointerEventData e)
-        {
-            if (!iconImage.enabled) return;          // nothing to drag
+    public void OnDrop(PointerEventData eventData) // Logic remains the same
+    {
+        GameObject draggedObject = eventData.pointerDrag; if (draggedObject == null) return;
+        SlotView sourceSlotView = draggedObject.GetComponent<SlotView>();
+        if (sourceSlotView == null || sourceSlotView.slotIndex == this.slotIndex) return;
+        if (ui != null) ui.RequestMergeOrSwap(sourceSlotView.slotIndex, this.slotIndex);
+    }
 
-            // --- ghost ---
-            dragGhost = new GameObject("DragGhost",
-                                       typeof(RectTransform),
-                                       typeof(CanvasGroup),
-                                       typeof(Image));
-            var rt  = dragGhost.GetComponent<RectTransform>();
-            var img = dragGhost.GetComponent<Image>();
-            var g   = dragGhost.GetComponent<CanvasGroup>();
-
-            img.sprite        = iconImage.sprite;
-            img.raycastTarget = false;
-
-            rt.SetParent(rootCanvas.transform, false);
-            rt.sizeDelta = iconImage.rectTransform.sizeDelta;
-            rt.position  = Input.mousePosition;
-            g.blocksRaycasts = false;
-
-            // --- fade only item visuals ---
-            iconOrig = iconImage.color;
-            txtOrig  = quantityText.color;
-
-            var halfIcon = iconOrig; halfIcon.a *= 0.5f;
-            var halfTxt  = txtOrig;  halfTxt .a *= 0.5f;
-
-            iconImage.color    = halfIcon;
-            quantityText.color = halfTxt;
-
-            DraggingChanged?.Invoke(true); 
-        }
-
-        public void OnDrag(PointerEventData e)
-        {
-            if (dragGhost)
-                dragGhost.transform.position = Input.mousePosition;
-        }
-
-        public void OnEndDrag(PointerEventData e)
-        {
-            if (dragGhost) Destroy(dragGhost);
-            dragGhost = null;
-
-            // restore full opacity
-            iconImage.color    = iconOrig;
-            quantityText.color = txtOrig;
-            
-            DraggingChanged?.Invoke(false); 
-        }
-
-        public void OnDrop(PointerEventData e)
-        {
-            var src = e.pointerDrag?.GetComponent<SlotView>();
-            if (src == null || src.slotIndex == slotIndex) return;
-
-            ui.RequestMergeOrSwap(src.slotIndex, slotIndex);
-        }
-
-        /* ─────────────────────── click inspect ──────────────────────── */
-        public void OnPointerClick(PointerEventData e)
-        {
-            if (e.button == PointerEventData.InputButton.Left)
-                ui.RequestInspect(slotIndex);
-        }
+    public void OnPointerClick(PointerEventData eventData) // Logic remains the same
+    {
+        if (eventData.button == PointerEventData.InputButton.Left) { if (ui != null) ui.RequestInspect(slotIndex); }
     }
 }

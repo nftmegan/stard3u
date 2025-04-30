@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a2838ce9f2134584f8de5cd2dbec9980, type: 3}
+  m_Name: PlayerEquipmentRegistry
+  m_EditorClassIdentifier: 
+  equipmentMappings:
+  - itemDefinition: {fileID: 11400000, guid: 376270f88e941b74691e5e9c1e9a239a, type: 2}
+    prefab: {fileID: 5694252633483443476, guid: 35e22648225ae6d40a3dea3a83cae6d7, type: 3}
+  - itemDefinition: {fileID: 11400000, guid: 18658935c808f2743a01c86438e9882a, type: 2}
+    prefab: {fileID: 4060200081054459045, guid: 88e3d929ebe50984abef4036743f2614, type: 3}
+  fallbackHandsPrefab: {fileID: 1553693582981806270, guid: b8f8975a936438848b72e72b03d0d193, type: 3}

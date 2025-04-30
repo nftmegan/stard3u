@@ -1,4 +1,3 @@
-using Game.InventoryLogic;
 using UnityEngine;
 
 [System.Serializable]
