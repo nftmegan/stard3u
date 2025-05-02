@@ -1,8 +1,8 @@
 using UnityEngine;
-using System.Collections;
 
-[CreateAssetMenu(fileName = "RecoilPattern", menuName = "Weapons/Recoil Pattern")]
-public class RecoilPattern : ScriptableObject {
+[System.Serializable]
+public class RecoilPattern // Keeping it as a class as requested
+{
     [Header("Rotation (°)")]
     public float verticalMin    = 1f;
     public float verticalMax    = 2f;
@@ -23,4 +23,31 @@ public class RecoilPattern : ScriptableObject {
 
     [Tooltip("Easing curve for both recoil & recovery")]
     public AnimationCurve recoilCurve = AnimationCurve.EaseInOut(0,0,1,1);
+
+    // --- ADD THIS PARAMETERLESS CONSTRUCTOR ---
+    // This allows 'new RecoilPattern()' to work again.
+    // It initializes fields to their default values (like the field initializers above).
+    public RecoilPattern() { }
+    // --- END ADDED CONSTRUCTOR ---
+
+    // --- COPY CONSTRUCTOR (Keep this) ---
+    // Handles new RecoilPattern(otherPattern)
+    public RecoilPattern(RecoilPattern other)
+    {
+        // Null check for safety, although unlikely if used correctly
+        if (other == null) return;
+
+        this.verticalMin = other.verticalMin;
+        this.verticalMax = other.verticalMax;
+        this.horizontalMin = other.horizontalMin;
+        this.horizontalMax = other.horizontalMax;
+        this.rollMin = other.rollMin;
+        this.rollMax = other.rollMax;
+        this.kickbackMin = other.kickbackMin;
+        this.kickbackMax = other.kickbackMax;
+        this.recoilDuration = other.recoilDuration;
+        this.recoveryDuration = other.recoveryDuration;
+        // AnimationCurve is a class, needs deep copy
+        this.recoilCurve = (other.recoilCurve != null) ? new AnimationCurve(other.recoilCurve.keys) : new AnimationCurve();
+    }
 }

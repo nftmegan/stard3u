@@ -1,344 +1,441 @@
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
-/// <summary>
-/// Base class for any firearm (pistol, rifle, SMG …).
-/// It pulls static data from <see cref="FireArmItemData"/> and
-/// per-instance state (magazine, attachments, durability) from
-/// the <see cref="FirearmState"/> payload stored inside the
-/// <see cref="InventoryItem"/> passed by <see cref="EquipmentController"/>.
-/// </summary>
 public abstract class FirearmBehavior : EquippableBehavior
 {
-    /* ─── Cached static + runtime refs ───────────────────────── */
-    private FirearmItemData def;      // static definition (ScriptableObject)
-    [SerializeField] private FirearmState state;    // per-instance runtime payload
-
-    private IAimProvider aimProvider;
-    private Coroutine reloadRoutine;
-    private Coroutine autoFireRoutine;
-
-    private bool  isCooldown;
-    private bool  isReloading;
-    private float lastShotTime;
-
-    /* ─── ADS state ──────────────────────────────────────────── */
-    private Transform _currentWeaponAimPoint;
-    private Vector3   _currentCameraAnchorOffset;
-
-    /* ─── Quick access properties ───────────────────────────── */
-    private int   MaxBullets => def.magazineSize;
-    private float AutoDelay  => 1f / def.fireRate; // unified delay for tap and auto
-    private bool  IsAuto     => def.fireMode == FireMode.Auto;
-    public  int   CurrentAmmo => state.magazine[0].quantity;
-
-    /* ─── Inspector refs ────────────────────────────────────── */
-    [Header("References")]
+    // --- Inspector Refs ---
+    [Header("Component References")]
     [SerializeField] protected Transform firePoint;
     [SerializeField] protected FirearmAudioHandler audioHandler;
     [SerializeField] protected RecoilHandler recoilHandler;
     [SerializeField] protected MuzzleFlashHandler muzzleHandler;
-
-    [Header("ADS Setup")]
-    [Tooltip("Reference to the ADSController component on this GameObject.")]
     [SerializeField] protected ADSController adsController;
 
-    [Tooltip("Fallback aim point when no sight is attached.")]
+    [Header("ADS Setup")]
     [SerializeField] protected Transform defaultWeaponAimPointTransform;
-
-    [Tooltip("Fallback camera offset when no sight is attached.")]
     [SerializeField] private Vector3 defaultCameraAnchorOffset = new Vector3(0, 0, 0.15f);
 
-    [Header("Attachment Mounts")]
-    [Tooltip("Parent under which all attachments will be instantiated")]
+    [Header("Attachment Setup")]
     [SerializeField] private Transform attachmentsRoot;
 
-    // key = attachment‐slot index, value = instantiated GameObject
-    private readonly Dictionary<int, GameObject> _activeAttachmentInstances = new();
-    // map of mount-point “tags” (e.g. SightMount, MuzzleMount) → Transform
-    private readonly Dictionary<string, Transform> _mountPoints = new();
+    // --- Cached Data & State ---
+    private FirearmItemData def;
+    private FirearmState state;
+    private IAimProvider aimProvider; // Found in Awake/Start
 
-    /* ─── Initialise (called by EquipmentController) ────────── */
-    public override void Initialize(InventoryItem inv, ItemContainer ownerInv)
-    {
-        base.Initialize(inv, ownerInv);
+    // --- Runtime State ---
+    private Coroutine reloadRoutine;
+    private Coroutine autoFireRoutine;
+    private bool isCooldown;
+    private bool isReloading;
+    private float lastShotTime;
 
-        def   = inv.data    as FirearmItemData;
-        state = inv.runtime as FirearmState;
-        if (def == null || state == null)
-            Debug.LogError($"{name} equipped with wrong ItemData or payload!");
+    private Transform _currentWeaponAimPoint;
+    private Vector3 _currentCameraAnchorOffset;
+    private RecoilPattern _effectiveRecoilPattern = new RecoilPattern(); // Initialize default
 
-        // cache all mount points
-        foreach (Transform t in attachmentsRoot)
-            _mountPoints[t.gameObject.tag] = t;
+    // --- Attachment Management ---
+    private readonly Dictionary<int, GameObject> _activeAttachmentInstances = new Dictionary<int, GameObject>();
+    private readonly List<AttachmentStatModifier> _activeStatModifiers = new List<AttachmentStatModifier>();
+    private readonly Dictionary<string, Transform> _mountPoints = new Dictionary<string, Transform>();
+    private bool _isInitialized = false; // Track if Initialize has run
 
-        // subscribe to attachment changes
-        state.attachments.OnSlotChanged += HandleAttachmentSlotChanged;
+    // --- Quick Access Properties ---
+    private int MaxBullets => def?.magazineSize ?? 1;
+    private float AutoDelay => (def != null && def.fireRate > 0) ? 1f / def.fireRate : 1f;
+    private bool IsAuto => def != null && def.fireMode == FireMode.Auto;
+    public int CurrentAmmo => state?.magazine != null && state.magazine.Size > 0 ? state.magazine[0].quantity : 0;
 
-        // seed ADS defaults
-        _currentWeaponAimPoint     = defaultWeaponAimPointTransform;
-        _currentCameraAnchorOffset = defaultCameraAnchorOffset;
-        adsController.SetWeaponAimPoint(_currentWeaponAimPoint);
-        adsController.SetCameraAnchorOffset(_currentCameraAnchorOffset);
-        adsController.ForceStopAiming();
-
-        // instantiate any already-attached items
-        RefreshAllAttachments();
-    }
+    // --- Unity Lifecycle ---
 
     protected virtual void Awake()
     {
-        aimProvider   = GetComponentInParent<IAimProvider>();
-        adsController = GetComponent<ADSController>();
-    }
+        // Find essential components that don't depend on ItemData/State yet
+        aimProvider = GetComponentInParent<IAimProvider>();
+        // Null checks for components assigned in Inspector happen during Initialize/validation steps.
+        if (aimProvider == null) Debug.LogError($"[{GetType().Name}] IAimProvider not found in parent hierarchy!", this);
 
-    /* ─── Input ------------------------------------------------ */
-    public override void OnFire1Down()
-    {
-        if (isReloading) return;
-
-        if (IsAuto)
+        // Cache mount points ONCE if attachmentsRoot is valid
+        // Do this in Awake as the hierarchy should be stable.
+        _mountPoints.Clear();
+        if (attachmentsRoot != null)
         {
-            // start continuous fire
-            if (autoFireRoutine != null)
-                StopCoroutine(autoFireRoutine);
-
-            autoFireRoutine = StartCoroutine(AutoFireCoroutine());
+            foreach (Transform t in attachmentsRoot)
+            {
+                if (t != null && !string.IsNullOrEmpty(t.gameObject.tag))
+                {
+                    _mountPoints[t.gameObject.tag] = t;
+                }
+            }
         }
         else
         {
-            if (isCooldown) return;
-            SingleFire();
+             Debug.LogWarning($"[{GetType().Name}] Attachments Root is not assigned in Awake. Attachments require manual assignment or will fail.", this);
         }
     }
 
-    public override void OnFire1Up()
+    // Initialize is called EXTERNALLY by EquipmentController when this specific item is equipped
+    public override void Initialize(InventoryItem inv, ItemContainer ownerInv)
     {
-        // stop continuous fire
-        if (autoFireRoutine != null)
+        base.Initialize(inv, ownerInv); // Sets runtimeItem and ownerInventory in base
+
+        // --- Reset core state flags ---
+        _isInitialized = false; // Mark as needing full setup
+        isReloading = false;
+        isCooldown = false;
+        // Stop any lingering coroutines from previous activations (belt-and-braces)
+        StopRunningCoroutines();
+
+        // --- Get Data and State from InventoryItem ---
+        if (inv != null)
         {
-            StopCoroutine(autoFireRoutine);
-            autoFireRoutine = null;
-        }
-    }
+            def = inv.data as FirearmItemData;
+            state = inv.runtime as FirearmState;
 
-    public override void OnFire2Down()
-    {
-        if (isReloading) return;
-
-        // use whatever aim point & offset is currently active
-        adsController.SetWeaponAimPoint(_currentWeaponAimPoint);
-        adsController.SetCameraAnchorOffset(_currentCameraAnchorOffset);
-        adsController.StartAiming();
-    }
-
-    public override void OnFire2Up()
-    {
-        adsController?.StopAiming();
-    }
-
-    public override void OnReloadDown() => Reload();
-
-    /* ─── Shooting logic ────────────────────────────────────── */
-    private void SingleFire()
-    {
-        if (Time.time - lastShotTime < AutoDelay) return;
-
-        if (CurrentAmmo <= 0)
-        {
-            audioHandler?.PlayDryFire();
+            // Validate essential data
+            if (def == null) { Debug.LogError($"[{GetType().Name}] Initialized with ItemData that is not FirearmItemData!", this); return; }
+            if (state == null) { Debug.LogError($"[{GetType().Name}] Initialized with InventoryItem missing FirearmState runtime payload!", this); return; }
         }
         else
         {
-            Shoot();
-            ConsumeRound();
+             Debug.LogWarning($"[{GetType().Name}] Initialized with null InventoryItem. Behavior may be limited (e.g., unarmed).", this);
+             // If truly unarmed, def and state will remain null. Subsequent logic should handle this.
+             // Clear any visuals from a previous state if this instance is being reused for unarmed.
+             ClearAllAttachmentsVisuals(); // Explicitly clear visuals if becoming unarmed
+             def = null;
+             state = null;
+             // Update handlers with default/null state if needed
+             UpdateHandlersWithCurrentState();
+             _isInitialized = true; // Mark as initialized (even if unarmed)
+             return; // Exit if unarmed
         }
 
-        lastShotTime = Time.time;
-        StartCooldown();
-    }
+        // --- Validate Component References (Assigned in Inspector) ---
+        if (adsController == null) Debug.LogError($"[{GetType().Name} '{def.itemName}'] ADSController reference is missing!", this);
+        if (recoilHandler == null) Debug.LogError($"[{GetType().Name} '{def.itemName}'] RecoilHandler reference is missing!", this);
+        // AttachmentsRoot warning is in Awake
+        if (defaultWeaponAimPointTransform == null) Debug.LogWarning($"[{GetType().Name} '{def.itemName}'] Default Weapon Aim Point Transform is not assigned!", this);
 
-    protected virtual void Shoot()
-    {
-        var projItemData = state.magazine[0].item.data as ProjectileItemData;
-        var projPrefab   = projItemData?.projectilePrefab;
-        if (projPrefab == null || firePoint == null) return;
 
-        Vector3 target = aimProvider.GetAimHitPoint();
-        Vector3 dir    = (target - firePoint.position).normalized;
+        // --- Setup based on new data/state ---
 
-        var proj = Instantiate(projPrefab, firePoint.position, Quaternion.LookRotation(dir));
-        proj.Launch(dir, projItemData.baseShootForce);
-
-        audioHandler?.PlayShootSound();
-        muzzleHandler?.Muzzle();
-        recoilHandler?.ApplyRecoil();
-    }
-
-    private void ConsumeRound() => state.magazine[0].ReduceQuantity(1);
-
-    /* ─── Auto-fire coroutine ───────────────────────────────── */
-    private IEnumerator AutoFireCoroutine()
-    {
-        // fire as long as button held, not reloading, and ammo remains
-        while (!isReloading && CurrentAmmo > 0)
+        // Subscribe to state changes (Unsubscribe first ensures no duplicates if Initialize is called multiple times)
+        if (state?.attachments != null)
         {
-            Shoot();
-            ConsumeRound();
-            yield return new WaitForSeconds(AutoDelay);
+            state.attachments.OnSlotChanged -= HandleAttachmentSlotChanged;
+            state.attachments.OnSlotChanged += HandleAttachmentSlotChanged;
         }
 
-        // out of ammo or reloading -> play dry fire sound if needed
-        if (CurrentAmmo <= 0)
-            audioHandler?.PlayDryFire();
+        // Perform the full refresh: Clears old visuals, instantiates new ones based on 'state',
+        // calculates stats, updates ADS/Recoil handlers.
+        RefreshAllAttachments();
 
-        autoFireRoutine = null;
+        _isInitialized = true; // Mark initialization complete for this item setup
     }
 
-    /* ─── Cool-down ─────────────────────────────────────────── */
-    private void StartCooldown()
+
+    // OnEnable is called AFTER Awake, and every time SetActive(true) is used.
+    protected override void OnEnable()
     {
-        isCooldown = true;
-        Invoke(nameof(EndCooldown), AutoDelay);
+        base.OnEnable(); // Call base if it does anything
+
+        // If Initialize has already run at least once (meaning def/state should be set
+        // for this specific instance's logical item), we need to ensure the visuals
+        // and handlers are synchronized with that state upon re-activation.
+        if (_isInitialized)
+        {
+            // Refresh everything to match the current 'def' and 'state'
+            // This handles the case where the cached instance is re-enabled.
+            RefreshAllAttachments();
+
+             // Ensure ADS is reset correctly on enable
+             if(adsController != null) {
+                 adsController.ForceStopAiming();
+                 // ADSController's SetWeaponAimPoint/Offset is called inside RefreshAllAttachments
+             }
+        }
+        // If _isInitialized is false, it means Initialize hasn't run yet for this
+        // specific equip action. Initialize will be called shortly by EquipmentController
+        // and handle the setup, including the first RefreshAllAttachments.
     }
 
+    // OnDisable is called when SetActive(false) is used or the object is destroyed.
+    protected override void OnDisable()
+    {
+        // --- Stop Active Processes ---
+        StopRunningCoroutines();
+        CancelInvoke(); // Cancel any pending invokes (like EndCooldown)
+
+        // --- Unsubscribe ---
+        // Important to check 'state' as it might be null if initialized as unarmed
+        if (state?.attachments != null)
+        {
+            state.attachments.OnSlotChanged -= HandleAttachmentSlotChanged;
+        }
+
+        // --- Cleanup Visuals ---
+        // Destroy the instantiated attachment GameObjects when disabled.
+        // This prevents them lingering when the object is cached but inactive.
+        ClearAllAttachmentsVisuals();
+
+        // --- Reset State ---
+        adsController?.ForceStopAiming();
+        isReloading = false; // Ensure reload is cancelled visually/logically if disabled mid-reload
+
+        // We don't reset _isInitialized here, as the instance might be re-enabled later.
+        // We keep def/state associated with this instance until Initialize is called with a new item.
+
+        base.OnDisable(); // Call base if it does anything
+    }
+
+    // --- Core Logic Methods (Shoot, Reload, etc.) ---
+    // (Keep the implementations for OnFire1Down, OnFire1Up, OnFire2Down, OnFire2Up, OnReloadDown,
+    // SingleFire, Shoot, ConsumeRound, AutoFireCoroutine, StartCooldown, EndCooldown, Reload, ReloadCoroutine
+    // from the previous complete script - they don't need significant changes for this issue)
+    public override void OnFire1Down() { if (isReloading || def == null || !_isInitialized) return; if (IsAuto) { if (autoFireRoutine != null) StopCoroutine(autoFireRoutine); autoFireRoutine = StartCoroutine(AutoFireCoroutine()); } else { if (isCooldown) return; SingleFire(); } }
+    public override void OnFire1Up() { if (autoFireRoutine != null) { StopCoroutine(autoFireRoutine); autoFireRoutine = null; } }
+    public override void OnFire2Down() { if (isReloading || adsController == null || def == null || !_isInitialized) return; adsController.StartAiming(); }
+    public override void OnFire2Up() { adsController?.StopAiming(); }
+    public override void OnReloadDown() { if (def == null || state == null || !_isInitialized) return; Reload(); }
+    private void SingleFire() { if (Time.time - lastShotTime < AutoDelay) return; if (CurrentAmmo <= 0) { audioHandler?.PlayDryFire(); } else { Shoot(); ConsumeRound(); StartCooldown(); } lastShotTime = Time.time; }
+    protected virtual void Shoot() { if (state?.magazine == null || state.magazine.Size == 0 || state.magazine[0].IsEmpty()) return; var projItemData = state.magazine[0].item?.data as ProjectileItemData; if (projItemData == null || projItemData.projectilePrefab == null) { Debug.LogWarning($"[{GetType().Name}] No projectile prefab for loaded ammo: {state.magazine[0].item?.data?.itemName ?? "NULL"}", this); return; } var projPrefab = projItemData.projectilePrefab; if (firePoint == null || aimProvider == null) { Debug.LogError($"[{GetType().Name}] Missing FirePoint or IAimProvider!", this); return; } Vector3 target = aimProvider.GetAimHitPoint(); Vector3 dir = (target - firePoint.position).normalized; var proj = Instantiate(projPrefab, firePoint.position, Quaternion.LookRotation(dir)); proj.Launch(dir, projItemData.baseShootForce); audioHandler?.PlayShootSound(); muzzleHandler?.Muzzle(); recoilHandler?.ApplyRecoil(); }
+    private void ConsumeRound() { if (state?.magazine != null && state.magazine.Size > 0) { state.magazine[0].ReduceQuantity(1); } }
+    private IEnumerator AutoFireCoroutine() { while (!isReloading && CurrentAmmo > 0) { Shoot(); ConsumeRound(); yield return new WaitForSeconds(AutoDelay); } if (CurrentAmmo <= 0 && !isReloading) { audioHandler?.PlayDryFire(); } autoFireRoutine = null; }
+    private void StartCooldown() { isCooldown = true; CancelInvoke(nameof(EndCooldown)); Invoke(nameof(EndCooldown), AutoDelay); }
     private void EndCooldown() => isCooldown = false;
+    private void Reload() { if (isReloading) return; if (def?.ammoType == null) { Debug.LogWarning($"[{GetType().Name}] Cannot reload: AmmoType undefined.", this); return; } if (ownerInventory == null) { Debug.LogError($"[{GetType().Name}] Cannot reload: OwnerInventory null.", this); return; } if (state?.magazine == null || state.magazine.Size == 0) { Debug.LogError($"[{GetType().Name}] Cannot reload: No magazine state.", this); return; } int currentInMag = state.magazine[0].quantity; if (currentInMag >= MaxBullets) return; int needed = MaxBullets - currentInMag; if (needed <= 0) return; if (!ownerInventory.HasItem(def.ammoType)) { Debug.Log($"[{GetType().Name}] No {def.ammoType.itemName} in inventory."); return; } if (reloadRoutine != null) StopCoroutine(reloadRoutine); reloadRoutine = StartCoroutine(ReloadCoroutine()); }
+    private IEnumerator ReloadCoroutine() { isReloading = true; adsController?.ForceStopAiming(); if (autoFireRoutine != null) { StopCoroutine(autoFireRoutine); autoFireRoutine = null; } audioHandler?.PlayReload(); yield return new WaitForSeconds(def?.reloadTime ?? 1.0f); if (!isReloading) yield break; int needed = MaxBullets - CurrentAmmo; if (needed > 0 && ownerInventory != null && def?.ammoType != null && state?.magazine != null) { ownerInventory.Withdraw(def.ammoType, needed, state.magazine[0]); } isReloading = false; reloadRoutine = null; audioHandler?.OnReloadComplete(); }
 
-    /* ─── Reload ------------------------------------------------ */
-    private void Reload()
-    {
-        if (isReloading || CurrentAmmo >= MaxBullets) return;
-        if (reloadRoutine != null) StopCoroutine(reloadRoutine);
-        reloadRoutine = StartCoroutine(ReloadCoroutine());
-    }
 
-    private IEnumerator ReloadCoroutine()
-    {
-        isReloading = true;
-        // stop any auto-fire while reloading
-        if (autoFireRoutine != null)
-        {
-            StopCoroutine(autoFireRoutine);
-            autoFireRoutine = null;
-        }
+    // --- Attachment Logic ---
 
-        yield return new WaitForSeconds(0.5f); // play SFX / anim here
-
-        int need = MaxBullets - CurrentAmmo;
-        ownerInventory.Withdraw(def.ammoType, need, state.magazine[0]);
-
-        isReloading   = false;
-        reloadRoutine = null;
-    }
-
-    /* ─── Attachment plumbing ────────────────────────────────── */
     private void HandleAttachmentSlotChanged(int slotIndex)
     {
-        if (slotIndex < 0) return;
-        RefreshAttachment(slotIndex);
+        if (!_isInitialized) return; // Don't react if not fully initialized
+
+        if (slotIndex < 0) // Structural change
+        {
+            RefreshAllAttachments();
+        }
+        else // Single slot changed
+        {
+            RefreshAttachment(slotIndex);
+        }
     }
 
+    // Clears existing visuals and rebuilds all based on current 'state'
     private void RefreshAllAttachments()
     {
-        for (int i = 0; i < state.attachments.Slots.Length; i++)
-            RefreshAttachment(i);
-    }
+        // 1. Clear existing visuals and runtime lists
+        ClearAllAttachmentsVisuals();
 
-    private void RefreshAttachment(int slotIndex)
-    {
-        // tear down old
-        if (_activeAttachmentInstances.TryGetValue(slotIndex, out var oldGo))
+        // 2. Instantiate and Apply based on current state.attachments
+        if (state?.attachments != null) // Ensure state and attachments container exist
         {
-            Destroy(oldGo);
-            _activeAttachmentInstances.Remove(slotIndex);
-        }
-
-        // spawn new if present
-        var slot = state.attachments.Slots[slotIndex];
-        if (slot.item != null)
-        {
-            var data = slot.item.data as AttachmentItemData;
-            if (data != null && _mountPoints.TryGetValue(data.mountPointTag, out var mount))
+            for (int i = 0; i < state.attachments.Slots.Length; i++)
             {
-                // align prefab to mount’s rotation too
-                var go = Instantiate(data.attachmentPrefab, mount.position, mount.rotation, mount);
-                go.transform.localPosition = Vector3.zero;
-                _activeAttachmentInstances[slotIndex] = go;
-                ApplyAttachmentToADS(data, go);
+                var slot = state.attachments.Slots[i];
+                if (slot == null || slot.IsEmpty()) continue;
+
+                AttachmentItemData attachmentData = slot.item.data as AttachmentItemData;
+                InstantiateSingleAttachment(attachmentData, i); // Refactored instantiation
             }
         }
 
-        // if no sight remains, reset to default
-        MaybeResetToDefaultAim();
+        // 3. Calculate combined stats and update handlers (ADS/Recoil)
+        UpdateHandlersWithCurrentState();
     }
 
-    private void ApplyAttachmentToADS(AttachmentItemData data, GameObject instance)
+    // Cleans up and potentially replaces attachment in a single slot
+    private void RefreshAttachment(int slotIndex)
     {
-        if (data.attachmentType != AttachmentType.Sight) return;
+        if (state?.attachments == null || slotIndex < 0 || slotIndex >= state.attachments.Slots.Length) return; // Bounds check
 
-        Transform aimTf = FindDeep(instance.transform, data.sightAimPointName);
-        if (aimTf == null)
+        // 1. Teardown Old Visuals for this specific slot
+        ClearSingleAttachmentVisuals(slotIndex);
+
+        // 2. Instantiate New Visuals if an item exists in the slot now
+        var slot = state.attachments.Slots[slotIndex];
+        AttachmentItemData attachmentData = slot?.item?.data as AttachmentItemData;
+        if (attachmentData != null) // Only instantiate if there's data
         {
-            Debug.LogError($"[Firearm] '{data.attachmentPrefab.name}' missing '{data.sightAimPointName}'", instance);
-            return;
+             InstantiateSingleAttachment(attachmentData, slotIndex);
         }
 
-        _currentWeaponAimPoint     = aimTf;
-        _currentCameraAnchorOffset = data.overrideCameraAnchorOffset
-                                    ? data.customCameraAnchorOffset
-                                    : defaultCameraAnchorOffset;
+        // 3. Recalculate stats and update handlers
+        UpdateHandlersWithCurrentState(); // Always update after any change
     }
 
-    private void MaybeResetToDefaultAim()
+    // Helper to instantiate and configure a single attachment
+    private GameObject InstantiateSingleAttachment(AttachmentItemData data, int slotIndex)
     {
-        bool hasSight = state.attachments.Slots.Any(s =>
-            s.item != null &&
-            (s.item.data as AttachmentItemData)?.attachmentType == AttachmentType.Sight
-        );
+         if (data == null || data.attachmentPrefab == null) return null;
 
-        if (!hasSight)
+        if (_mountPoints.TryGetValue(data.mountPointTag, out var mount))
         {
-            _currentWeaponAimPoint     = defaultWeaponAimPointTransform;
+            // Instantiate
+            var go = Instantiate(data.attachmentPrefab, mount.position, mount.rotation, mount);
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.identity;
+            _activeAttachmentInstances[slotIndex] = go; // Store reference
+
+            // Apply Effects (find and store modifiers)
+            var statModifier = go.GetComponentInChildren<AttachmentStatModifier>(true);
+            if (statModifier != null)
+            {
+                _activeStatModifiers.Add(statModifier);
+            }
+            // Apply other effects (lasers, etc.) if needed
+
+            return go;
+        }
+        else
+        {
+            Debug.LogWarning($"[{GetType().Name}] Mount point tag '{data.mountPointTag}' not found for attachment '{data.itemName}' slot {slotIndex}.", this);
+            return null;
+        }
+    }
+
+
+    // Helper to destroy all attachment GOs and clear tracking lists
+    private void ClearAllAttachmentsVisuals()
+    {
+        // Use ToList() to avoid modifying collection while iterating
+        foreach (var kvp in _activeAttachmentInstances.ToList())
+        {
+            ClearSingleAttachmentVisuals(kvp.Key);
+        }
+        // Ensure lists are cleared even if dictionary was already empty
+         _activeAttachmentInstances.Clear();
+         _activeStatModifiers.Clear();
+    }
+
+    // Helper to destroy visuals and remove tracking for a single slot
+    private void ClearSingleAttachmentVisuals(int slotIndex)
+    {
+        if (_activeAttachmentInstances.TryGetValue(slotIndex, out var instanceGO))
+        {
+            if (instanceGO != null)
+            {
+                // Remove associated effects FIRST
+                var statModifier = instanceGO.GetComponentInChildren<AttachmentStatModifier>(true);
+                if (statModifier != null)
+                {
+                    _activeStatModifiers.Remove(statModifier);
+                }
+                // Remove other effects if tracked
+
+                // Then destroy the GameObject
+                Destroy(instanceGO);
+            }
+            // Remove from dictionary even if GO was already null
+             _activeAttachmentInstances.Remove(slotIndex);
+        }
+    }
+
+    // Central place to calculate stats and update dependent components (ADS, Recoil)
+    private void UpdateHandlersWithCurrentState()
+    {
+         RecalculateEffectiveStats(); // Calculates _effectiveRecoilPattern
+         UpdateCurrentAimPointAndOffset(); // Calculates _currentWeaponAimPoint/_currentCameraAnchorOffset
+
+         // Update Recoil Handler
+         if (recoilHandler != null)
+         {
+             recoilHandler.SetRecoilPattern(_effectiveRecoilPattern);
+         }
+
+         // Update ADS Controller
+         if (adsController != null)
+         {
+             adsController.SetWeaponAimPoint(_currentWeaponAimPoint);
+             adsController.SetCameraAnchorOffset(_currentCameraAnchorOffset);
+         }
+    }
+
+    // Calculates the effective recoil pattern based on 'def' and active modifiers
+    private void RecalculateEffectiveStats()
+    {
+        // Start with base pattern (handle null def for unarmed state)
+        _effectiveRecoilPattern = (def?.baseRecoilPattern != null) ? new RecoilPattern(def.baseRecoilPattern) : new RecoilPattern();
+
+        // Apply modifiers
+        foreach (var modifier in _activeStatModifiers)
+        {
+            if(modifier == null) continue;
+            _effectiveRecoilPattern.verticalMin *= modifier.verticalRecoilMultiplier;
+            _effectiveRecoilPattern.verticalMax *= modifier.verticalRecoilMultiplier;
+            _effectiveRecoilPattern.horizontalMin *= modifier.horizontalRecoilMultiplier;
+            _effectiveRecoilPattern.horizontalMax *= modifier.horizontalRecoilMultiplier;
+            _effectiveRecoilPattern.rollMin *= modifier.rollRecoilMultiplier;
+            _effectiveRecoilPattern.rollMax *= modifier.rollRecoilMultiplier;
+            _effectiveRecoilPattern.kickbackMin *= modifier.kickbackRecoilMultiplier;
+            _effectiveRecoilPattern.kickbackMax *= modifier.kickbackRecoilMultiplier;
+            _effectiveRecoilPattern.recoveryDuration *= modifier.recoveryDurationMultiplier;
+            _effectiveRecoilPattern.recoveryDuration = Mathf.Max(0.01f, _effectiveRecoilPattern.recoveryDuration);
+        }
+        // Apply other stat calculations here (ADS speed multiplier, etc.)
+    }
+
+    // Determines the active aim point and offset based on attached sights
+    private void UpdateCurrentAimPointAndOffset()
+    {
+        Transform activeSightAimPoint = null;
+        AttachmentItemData sightData = null;
+
+        // Check active instances ONLY if state exists (handles unarmed case)
+        if (state?.attachments != null) {
+             foreach (var kvp in _activeAttachmentInstances)
+            {
+                GameObject instance = kvp.Value;
+                int slotIdx = kvp.Key;
+
+                // Basic safety checks
+                if (instance == null || slotIdx >= state.attachments.Slots.Length) continue;
+
+                var item = state.attachments.Slots[slotIdx].item;
+                var data = item?.data as AttachmentItemData;
+
+                if (data?.attachmentType == AttachmentType.Sight)
+                {
+                    var aimPointComponent = instance.GetComponentInChildren<AttachmentAimPoint>(true);
+                    if (aimPointComponent != null)
+                    {
+                        activeSightAimPoint = aimPointComponent.transform;
+                        sightData = data;
+                        break; // Found first sight
+                    }
+                    else { Debug.LogWarning($"Sight '{data.itemName}' missing AttachmentAimPoint component!", instance); }
+                }
+            }
+        }
+
+
+        // Apply found sight or defaults
+        if (activeSightAimPoint != null && sightData != null)
+        {
+            _currentWeaponAimPoint = activeSightAimPoint;
+            _currentCameraAnchorOffset = sightData.overrideCameraAnchorOffset ? sightData.customCameraAnchorOffset : defaultCameraAnchorOffset;
+        }
+        else
+        {
+            // Use weapon's defaults (check if default exists)
+            _currentWeaponAimPoint = defaultWeaponAimPointTransform; // Can be null if not assigned
             _currentCameraAnchorOffset = defaultCameraAnchorOffset;
         }
+
+        // Final safety check - log error if no aim point could be determined AT ALL
+        if (_currentWeaponAimPoint == null) {
+              Debug.LogError($"[{GetType().Name} '{def?.itemName ?? "Unknown"}'] CRITICAL: Could not determine weapon aim point (No sight attached AND DefaultWeaponAimPointTransform is null/not assigned!) ADS will likely fail.", this);
+         }
     }
 
-    private Transform FindDeep(Transform root, string name)
+    // --- Utility ---
+    private void StopRunningCoroutines()
     {
-        if (root.name == name) return root;
-        foreach (Transform child in root)
-        {
-            var found = FindDeep(child, name);
-            if (found != null) return found;
-        }
-        return null;
-    }
-
-    protected override void OnDisable()
-    {
-        base.OnDisable();
-
-        // stop any reload or auto-fire
-        isReloading = false;
-        if (reloadRoutine != null)
-        {
-            StopCoroutine(reloadRoutine);
-            reloadRoutine = null;
-        }
-        if (autoFireRoutine != null)
-        {
-            StopCoroutine(autoFireRoutine);
-            autoFireRoutine = null;
-        }
-
-        // unsubscribe and clean up attachments
-        if (state?.attachments != null)
-            state.attachments.OnSlotChanged -= HandleAttachmentSlotChanged;
-
-        foreach (var go in _activeAttachmentInstances.Values)
-            Destroy(go);
-        _activeAttachmentInstances.Clear();
+        if (reloadRoutine != null) { StopCoroutine(reloadRoutine); reloadRoutine = null; }
+        if (autoFireRoutine != null) { StopCoroutine(autoFireRoutine); autoFireRoutine = null; }
     }
 }

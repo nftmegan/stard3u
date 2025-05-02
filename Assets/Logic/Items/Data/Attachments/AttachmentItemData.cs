@@ -1,3 +1,4 @@
+// AttachmentItemData.cs (Relevant parts shown)
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "Items/Attachment")]
@@ -14,8 +15,7 @@ public class AttachmentItemData : ItemData
 
     // --- Sight Specific Data ---
     [Header("Sight Specific (If Type is Sight)")]
-    [Tooltip("Name of the Transform within the Attachment Prefab that defines the precise aiming point for ADS.")]
-    public string sightAimPointName = "SightAimPoint"; // e.g., a child Transform on the red dot prefab
+    // REMOVED: public string sightAimPointName = "SightAimPoint";
 
     [Tooltip("Does this sight override the default camera anchor offset?")]
     public bool overrideCameraAnchorOffset = false;
