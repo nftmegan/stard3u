@@ -5093,6 +5093,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6283718099614261908}
+  - component: {fileID: 2233087263713022199}
   m_Layer: 0
   m_Name: DefaultAimPoint
   m_TagString: Untagged
@@ -5115,6 +5116,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 164710945853971076}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2233087263713022199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4729134673631775009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3dac8184f5f35344b68fd8ec777cfe1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &5092389649403113124
 GameObject:
   m_ObjectHideFlags: 0
@@ -5197,6 +5210,8 @@ GameObject:
   - component: {fileID: 4060200081054459045}
   - component: {fileID: 3383114139123216041}
   - component: {fileID: 1862750640165091624}
+  - component: {fileID: 6573109682802274788}
+  - component: {fileID: 4146262957939346545}
   m_Layer: 6
   m_Name: PistolWeapon
   m_TagString: Untagged
@@ -5245,23 +5260,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a1bb461c84357704c9e8dedb150c14d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  state:
-    magazine:
-      _slots: []
-    attachments:
-      _slots: []
-    durability: 0
-  firePoint: {fileID: 3720125750782783448}
+  attachmentController: {fileID: 6573109682802274788}
   audioHandler: {fileID: 2210992644009611293}
-  recoilHandler: {fileID: 3836891828518639029}
   muzzleHandler: {fileID: 2557038514926300185}
+  recoilHandler: {fileID: 3836891828518639029}
   adsController: {fileID: 1862750640165091624}
-  defaultWeaponAimPointTransform: {fileID: 6283718099614261908}
-  defaultCameraAnchorOffset: {x: 0, y: 0, z: 0.3}
-  attachmentsRoot: {fileID: 4521308663317508927}
-  references:
-    version: 2
-    RefIds: []
+  spreadHandler: {fileID: 4146262957939346545}
+  firePoint: {fileID: 3720125750782783448}
 --- !u!114 &1862750640165091624
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5277,6 +5282,32 @@ MonoBehaviour:
   adsPivot: {fileID: 1311407796420685009}
   adsSpeed: 25
   _isAiming: 0
+--- !u!114 &6573109682802274788
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7472098887796209182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c87ccf6f08a17224cb3044d76205b0e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attachmentsRoot: {fileID: 4521308663317508927}
+  defaultCameraAnchorOffset: {x: 0, y: 0, z: 0.15}
+--- !u!114 &4146262957939346545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7472098887796209182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abce1548882087048adccddf6898aad9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &7695562387069566122
 GameObject:
   m_ObjectHideFlags: 0
@@ -5368,7 +5399,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 702e18e36bb749443a4c1446806f3030, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pattern: {fileID: 11400000, guid: bfea05baf34fbf74585d268ff4f55d80, type: 2}
   randomSeed: 8
 --- !u!1 &8952442053060659437
 GameObject:

@@ -13,11 +13,9 @@ MonoBehaviour:
   m_Name: WoodenArrowItem
   m_EditorClassIdentifier: 
   itemName: Wooden Arrow
-  icon: {fileID: 21300000, guid: d91d2da000cf54d4c84c7b2819dddb74, type: 3}
+  sprite: {fileID: 21300000, guid: d91d2da000cf54d4c84c7b2819dddb74, type: 3}
   stackable: 1
   maxStack: 64
   category: 3
   itemCode: wooden_arrow
-  uiSprite: {fileID: 0}
-  worldPrefab: {fileID: 0}
   projectilePrefab: {fileID: 2472870046886173474, guid: 213c2c7ab6435474daa6c252901d3199, type: 3}

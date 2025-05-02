@@ -13,19 +13,62 @@ MonoBehaviour:
   m_Name: PistolItem
   m_EditorClassIdentifier: 
   itemName: PIstol
-  icon: {fileID: 21300000, guid: c5b27972eaa56514ba34668ae029e54c, type: 3}
+  sprite: {fileID: 21300000, guid: c5b27972eaa56514ba34668ae029e54c, type: 3}
   stackable: 0
   maxStack: 1
   category: 1
   itemCode: pistol
-  uiSprite: {fileID: 0}
-  worldPrefab: {fileID: 0}
   weight: 50
   fireMode: 0
   fireRate: 50
-  shotCooldown: 0.2
+  reloadTime: 1.5
   magazineSize: 12
   ammoType: {fileID: 11400000, guid: 4a3bc48d7ee1c4a45b7188ba10bf2646, type: 2}
+  baseRecoilPattern:
+    verticalMin: 1
+    verticalMax: 2
+    horizontalMin: -1
+    horizontalMax: 1
+    rollMin: -0.5
+    rollMax: 0.5
+    kickbackMin: 0.02
+    kickbackMax: 0.05
+    recoilDuration: 0.1
+    recoveryDuration: 0.2
+    recoilCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+  baseSpreadPattern:
+    baseSpreadAngle: 0.5
+    maxSpreadAngle: 5
+    spreadIncreasePerShot: 0.75
+    spreadRecoveryRate: 10
+    spreadRecoveryDelay: 0.15
+  defaultCameraAnchorOffset: {x: 0, y: 0, z: 0.15}
+  adsVisualRecoilMultiplier: 0.5
+  adsSpreadMultiplier: 0.2
   attachmentSlots: 2
-  prefab: {fileID: 0}
-  hudSprite: {fileID: 0}
+  defaultAttachments:
+  - mountPointTag: SightMount
+    defaultPrefab: {fileID: 1154840838700442743, guid: 720842e40cc7c294f96dad9e25ee1a49, type: 3}

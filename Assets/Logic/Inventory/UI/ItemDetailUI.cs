@@ -16,7 +16,7 @@ public class ItemDetailUI : MonoBehaviour
     {
         inspectedSlot = slotIndex;
 
-        iconImage.sprite = item.data.icon;
+        iconImage.sprite = item.data.sprite;
         nameText.text    = item.data.itemName;
         quantityText.text = $"x{qty}";
 

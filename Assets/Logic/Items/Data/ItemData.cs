@@ -5,7 +5,7 @@ public class ItemData : ScriptableObject
 {
     [Header("Basic Info")]
     public string itemName = "New Item";
-    public Sprite icon;
+    public Sprite sprite;
 
     [Header("Stacking")]
     public bool stackable = false;
@@ -18,8 +18,4 @@ public class ItemData : ScriptableObject
     [Header("Metadata")]
     public ItemCategory category = ItemCategory.Generic;
     public string itemCode = "default_item";
-
-    [Header("Optional References")]
-    public Sprite uiSprite;
-    public GameObject worldPrefab;
 }

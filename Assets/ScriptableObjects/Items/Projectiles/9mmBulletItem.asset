@@ -13,13 +13,11 @@ MonoBehaviour:
   m_Name: 9mmBulletItem
   m_EditorClassIdentifier: 
   itemName: 9mm Ammo
-  icon: {fileID: 21300000, guid: 15995a81b4f59e64280341be1e0aa871, type: 3}
+  sprite: {fileID: 21300000, guid: 15995a81b4f59e64280341be1e0aa871, type: 3}
   stackable: 1
   maxStack: 64
   category: 3
   itemCode: 9mm_ammo
-  uiSprite: {fileID: 0}
-  worldPrefab: {fileID: 0}
   projectilePrefab: {fileID: -5247970097844160084, guid: de55a69517667ee4b9b01d1a24563e53, type: 3}
   damage: 10
   speed: 40

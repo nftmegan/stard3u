@@ -160,7 +160,7 @@ public class InventoryUIManager : MonoBehaviour
     {
         if (view == null) return;
         if (slot == null || slot.IsEmpty()) view.DrawEmpty();
-        else view.DrawStack(slot.item.data.icon, slot.quantity);
+        else view.DrawStack(slot.item.data.sprite, slot.quantity);
     }
 
     // --- Highlight Logic ---

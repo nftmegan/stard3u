@@ -1,36 +1,39 @@
 using UnityEngine;
 
 /// <summary>
-/// Attach this component to attachment prefabs (like grips, stocks, barrels)
-/// that modify the base weapon's statistics.
+/// Attach this component to attachment prefabs to modify weapon stats.
 /// </summary>
 public class AttachmentStatModifier : MonoBehaviour
 {
     [Header("ADS")]
     [Tooltip("Multiplier for ADS transition speed. > 1 speeds up, < 1 slows down.")]
+    [Range(0.5f, 2f)]
     public float adsSpeedMultiplier = 1.0f;
 
-    [Header("Recoil Multipliers (< 1 Reduces Recoil)")]
-    [Tooltip("Multiplier for vertical recoil magnitude.")]
-    public float verticalRecoilMultiplier = 1.0f;
+    [Header("Recoil Modifiers")]
+    [Tooltip("Overall multiplier for recoil magnitude (Vertical, Horizontal, Roll, Kickback). < 1 Reduces Recoil magnitude.")]
+    [Range(0f, 2f)]
+    public float recoilMagnitudeMultiplier = 1.0f;
+    [Tooltip("Multiplier for how quickly the weapon recovers from recoil. < 1 Faster Recovery, > 1 Slower Recovery.")]
+    [Range(0.5f, 2f)]
+    public float recoverySpeedMultiplier = 1.0f;
 
-    [Tooltip("Multiplier for horizontal recoil magnitude (both min/max).")]
-    public float horizontalRecoilMultiplier = 1.0f;
+    // --- ADDED SPREAD MODIFIERS ---
+    [Header("Spread Modifiers")]
+    [Tooltip("Multiplier for the minimum base spread angle. < 1 Tighter base spread.")]
+    [Range(0f, 2f)]
+    public float baseSpreadMultiplier = 1.0f;
 
-    // --- ADD THESE MISSING PUBLIC VARIABLES ---
-    [Tooltip("Multiplier for rotational roll magnitude.")]
-    public float rollRecoilMultiplier = 1.0f; // Default to 1 (no change)
+    [Tooltip("Multiplier for the maximum possible spread angle. < 1 Less max spread.")]
+    [Range(0f, 2f)]
+    public float maxSpreadMultiplier = 1.0f;
 
-    [Tooltip("Multiplier for positional kickback magnitude.")]
-    public float kickbackRecoilMultiplier = 1.0f; // Default to 1
+    [Tooltip("Multiplier for how much spread increases per shot. < 1 Less bloom.")]
+    [Range(0f, 2f)]
+    public float spreadIncreaseMultiplier = 1.0f;
 
-    [Tooltip("Multiplier for how quickly the weapon recovers from recoil (affects recovery duration).")]
-    public float recoveryDurationMultiplier = 1.0f; // Default to 1
-    // --- END ADDED VARIABLES ---
-
-    // Add other potential modifiers:
-    // public float hipFireAccuracyMultiplier = 1.0f;
-    // public float weaponSwayMultiplier = 1.0f;
-    // public float reloadSpeedMultiplier = 1.0f;
-    // public float effectiveRangeModifier = 0f; // Additive change?
+    [Tooltip("Multiplier for how fast spread recovers. < 1 Faster recovery, > 1 Slower recovery.")]
+    [Range(0.5f, 2f)]
+    public float spreadRecoveryMultiplier = 1.0f;
+    // --- END ADDED ---
 }

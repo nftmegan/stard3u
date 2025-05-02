@@ -13,16 +13,13 @@ MonoBehaviour:
   m_Name: RedDotSight
   m_EditorClassIdentifier: 
   itemName: Red Dot Sight
-  icon: {fileID: 0}
+  sprite: {fileID: 0}
   stackable: 0
   maxStack: 1
   category: 6
   itemCode: red_dot_sight
-  uiSprite: {fileID: 0}
-  worldPrefab: {fileID: 0}
   attachmentType: 1
   attachmentPrefab: {fileID: 487800455767311993, guid: 8f1996496839f8a4997e14a3d4213966, type: 3}
   mountPointTag: SightMount
-  sightAimPointName: SightAimPoint
-  overrideCameraAnchorOffset: 0
-  customCameraAnchorOffset: {x: 0, y: 0, z: 0.1}
+  overrideCameraAnchorOffset: 1
+  customCameraAnchorOffset: {x: 0, y: 0, z: 0.15}

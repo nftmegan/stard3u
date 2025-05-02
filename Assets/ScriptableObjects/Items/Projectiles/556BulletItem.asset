@@ -13,13 +13,11 @@ MonoBehaviour:
   m_Name: 556BulletItem
   m_EditorClassIdentifier: 
   itemName: 5.56 Ammo
-  icon: {fileID: 21300000, guid: 68d80154ccb28c0408c8a9bbb5a910ae, type: 3}
+  sprite: {fileID: 21300000, guid: 68d80154ccb28c0408c8a9bbb5a910ae, type: 3}
   stackable: 1
   maxStack: 64
   category: 3
   itemCode: 556_ammo
-  uiSprite: {fileID: 0}
-  worldPrefab: {fileID: 0}
   projectilePrefab: {fileID: 9020019139440753226, guid: 24e5adb7e977aae4eac613431c1000bb, type: 3}
   damage: 10
   speed: 20
