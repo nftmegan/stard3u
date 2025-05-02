@@ -3,7 +3,7 @@ using UnityEngine;
 public enum FireMode { Semi, Auto, Burst }
 
 [CreateAssetMenu(menuName = "Items/Weapon/Firearm")]
-public class FireArmItemData : WeaponItemData  // inherits from your existing ItemData
+public class FirearmItemData : WeaponItemData  // inherits from your existing ItemData
 {
     /* ────────── Static weapon tuning (designer edits) ────────── */
 
@@ -11,7 +11,6 @@ public class FireArmItemData : WeaponItemData  // inherits from your existing It
     public FireMode fireMode       = FireMode.Semi;
     [Tooltip("Shots per second for full-auto, or rpm/interval for burst")]
     public float    fireRate       = 10f;     // rounds-per-second
-    public float    shotCooldown   = 0.5f;    // enforced between semi taps
 
     [Header("Magazine")]
     [Min(1)]
@@ -34,7 +33,7 @@ public class FireArmItemData : WeaponItemData  // inherits from your existing It
     /// </summary>
     public InventoryItem CreateInventoryItem()
     {
-        var payload = new FirearmState(magazineSize, attachmentSlots);
+        var payload = new FirearmState(attachmentSlots, 100);
         var item    = new InventoryItem(this, payload);
         return item;
     }

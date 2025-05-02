@@ -21,7 +21,7 @@ public sealed class PickupStack : PickupItem
         }
 
         // Use the static factory for simple stackable items
-        return InventoryItem.CreateStack(itemData);
+        return new InventoryItem(itemData);
     }
 
     protected override int GetQuantityToPickup()

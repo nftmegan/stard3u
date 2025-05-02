@@ -4,7 +4,7 @@ using UnityEngine;
 public class PickupWeaponItem : PickupItem
 {
     [Header("Base Weapon Definition")]
-    [SerializeField] private FireArmItemData weaponData; // Assign FireArmItemData SO
+    [SerializeField] private FirearmItemData weaponData; // Assign FireArmItemData SO
 
     [Header("Initial State")]
     [SerializeField] [Min(0)] private int roundsInMag = 0;
@@ -36,7 +36,7 @@ public class PickupWeaponItem : PickupItem
             if (bulletsToAdd > 0)
             {
                 // Create a stack of ammo and place it in the magazine slot
-                state.magazine[0].item = InventoryItem.CreateStack(weaponData.ammoType);
+                state.magazine[0].item = new InventoryItem(weaponData.ammoType);
                 state.magazine[0].quantity = bulletsToAdd;
             }
         }
@@ -54,7 +54,7 @@ public class PickupWeaponItem : PickupItem
                 {
                     // Create attachment item (assuming attachments are simple items for now)
                     // A more complex system might require specific attachment runtime states
-                    state.attachments[i].item = InventoryItem.CreateStack(attachments[i]); // Use CreateStack if attachments have no state
+                    state.attachments[i].item = new InventoryItem(attachments[i]); // Use CreateStack if attachments have no state
                     state.attachments[i].quantity = 1;
                 }
             }

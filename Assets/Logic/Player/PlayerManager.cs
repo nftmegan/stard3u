@@ -46,7 +46,7 @@ public class PlayerManager : MonoBehaviour
         // ... other validation checks ...
 
         // Hook registry (initial state applied within Hook now)
-        uiPanelRegistry?.Hook(uiStateController);
+        // uiPanelRegistry?.Hook(uiStateController);
         // Subscribe to state changes
         if (uiStateController != null) { uiStateController.OnStateChanged += HandleUIStateChange; }
     }
@@ -64,7 +64,6 @@ public class PlayerManager : MonoBehaviour
 
 
         // --- <<< HOOK UP UI REGISTRY IN START >>> ---
-        // This guarantees UIPanelRegistry.Awake() has completed.
         if (uiPanelRegistry != null && uiStateController != null)
         {
             // Debug.Log($"[PlayerManager START] Hooking UIPanelRegistry ({uiPanelRegistry.name}) to UIStateController ({uiStateController.name}).");
@@ -72,15 +71,15 @@ public class PlayerManager : MonoBehaviour
         }
         else if (uiStateController == null)
         {
-             Debug.LogWarning("[PlayerManager START] UIStateController missing, cannot hook registry or set initial state properly.");
-             // Apply default input map state
-             HandleUIStateChange(new UIStateChanged(UIState.Gameplay, UIState.Gameplay));
+            Debug.LogWarning("[PlayerManager START] UIStateController missing, cannot hook registry or set initial state properly.");
+            // Apply default input map state
+            HandleUIStateChange(new UIStateChanged(UIState.Gameplay, UIState.Gameplay));
         }
         else // Registry is null
         {
-             Debug.LogWarning("[PlayerManager START] UIPanelRegistry missing, UI panels won't be managed by state.");
-             // Apply input map based on controller's initial state
-              HandleUIStateChange(new UIStateChanged(UIState.Gameplay, uiStateController.Current));
+            Debug.LogWarning("[PlayerManager START] UIPanelRegistry missing, UI panels won't be managed by state.");
+            // Apply input map based on controller's initial state
+            HandleUIStateChange(new UIStateChanged(UIState.Gameplay, uiStateController.Current));
         }
         // --- <<< END HOOK >>> ---
     }

@@ -4,7 +4,7 @@ public class PlayerLook : MonoBehaviour, IAimProvider
 {
     [Header("References")]
     [SerializeField] private Transform cameraPivot;
-    [SerializeField] private Transform yawRoot;
+    private Transform yawRoot;
 
     [Header("Look Settings")]
     [SerializeField] private float sensitivityX = 2f;

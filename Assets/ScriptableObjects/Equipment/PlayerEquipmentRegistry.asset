@@ -17,4 +17,6 @@ MonoBehaviour:
     prefab: {fileID: 5694252633483443476, guid: 35e22648225ae6d40a3dea3a83cae6d7, type: 3}
   - itemDefinition: {fileID: 11400000, guid: 18658935c808f2743a01c86438e9882a, type: 2}
     prefab: {fileID: 4060200081054459045, guid: 88e3d929ebe50984abef4036743f2614, type: 3}
+  - itemDefinition: {fileID: 11400000, guid: 707f30ec5fe3a6f4294283a3542aa835, type: 2}
+    prefab: {fileID: 96618205139549757, guid: dfe93ea21a773d344b363c89e5891172, type: 3}
   fallbackHandsPrefab: {fileID: 1553693582981806270, guid: b8f8975a936438848b72e72b03d0d193, type: 3}

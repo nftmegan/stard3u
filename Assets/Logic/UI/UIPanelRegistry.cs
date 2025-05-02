@@ -56,7 +56,7 @@ public class UIPanelRegistry : MonoBehaviour
             // --- APPLY INITIAL STATE ---
             // Get the state the controller is *currently* in when Hook is called
             UIState initialState = _hookedController.Current;
-            Debug.Log($"[UIPanelRegistry HOOK] Hooked. Controller's current state is: {initialState}. Applying this state now.");
+            //Debug.Log($"[UIPanelRegistry HOOK] Hooked. Controller's current state is: {initialState}. Applying this state now.");
 
             // Deactivate everything first (optional but ensures clean state if panels were active in editor)
             // DeactivateAllManagedPanels(); // Can sometimes cause flicker, might not be needed if Awake handles it.

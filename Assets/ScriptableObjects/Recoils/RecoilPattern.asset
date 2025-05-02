@@ -12,10 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f8cf6e38a1b279e4ba88a60c4ef87848, type: 3}
   m_Name: RecoilPattern
   m_EditorClassIdentifier: 
-  verticalMin: 3
-  verticalMax: 5
+  verticalMin: 0.5
+  verticalMax: 1
   horizontalMin: -0.5
   horizontalMax: 0.5
+  rollMin: 5
+  rollMax: -5
+  kickbackMin: 0.02
+  kickbackMax: 0.05
   recoilDuration: 0.15
   recoveryDuration: 0.1
   recoilCurve:

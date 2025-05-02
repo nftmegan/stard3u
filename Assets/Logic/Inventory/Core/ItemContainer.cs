@@ -8,8 +8,8 @@ public class ItemContainer
 {
     public event Action<int> OnSlotChanged;  // -1  => structural change
 
-    private InventorySlot[] _slots;
-    public  InventorySlot[]  Slots => _slots;   // expose but don’t allow ref
+    [SerializeField] private InventorySlot[] _slots;
+    public InventorySlot[]  Slots => _slots;   // expose but don’t allow ref
 
     /* ───────────────────────── ctor ───────────────────────── */
     public ItemContainer(int size)
@@ -130,7 +130,7 @@ public class ItemContainer
             int take = Mathf.Min(src.quantity, remaining);
 
             if (targetSlot.item == null)
-                targetSlot.item = InventoryItem.CreateStack(data);
+                targetSlot.item = new InventoryItem(data);
 
             targetSlot.AddQuantity(take);
             src.ReduceQuantity(take);
