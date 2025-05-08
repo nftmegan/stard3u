@@ -1,18 +1,22 @@
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public sealed class RuntimeEquippable : MonoBehaviour
-{
-    [SerializeField] private string itemCode;     // matches ItemData.itemCode
+public sealed class RuntimeEquippable : MonoBehaviour {
+    [SerializeField] private string itemCode;
+    private IEquippableInstance instanceBehavior;
+    public string ItemCode => itemCode;
 
-    private IEquippableInstance instance;        // cached target script
+    private void Awake() {
+        instanceBehavior = GetComponent<IEquippableInstance>();
+        if (instanceBehavior == null) Debug.LogError($"[RE] Missing IEquippableInstance on {gameObject.name}!", this);
+    }
 
-    private void Awake() =>
-        instance = GetComponent<IEquippableInstance>();
-
-    public string  ItemCode => itemCode;
-
-    /// Called by EquipmentController right after SetActive(true)
-    public void Initialize(InventoryItem runtimeItem, ItemContainer playerInv)
-        => instance?.Initialize(runtimeItem, playerInv);
+    // Signature matches the new IEquippableInstance
+    public void Initialize(InventoryItem itemInstance, IEquipmentHolder holder, IAimProvider aimProvider) {
+        if (instanceBehavior != null) {
+            instanceBehavior.Initialize(itemInstance, holder, aimProvider);
+        } else {
+             Debug.LogError($"[RE] Cannot forward Initialize on {gameObject.name}: IEquippableInstance missing!", this);
+        }
+    }
 }

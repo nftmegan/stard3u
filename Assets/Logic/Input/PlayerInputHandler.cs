@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using System;
 
-[RequireComponent(typeof(PlayerInput))] // Keep this one, InputHandler requires PlayerInput
+[RequireComponent(typeof(PlayerInput))]
 public class PlayerInputHandler : MonoBehaviour
 {
     private PlayerInput playerInput;
@@ -18,15 +18,16 @@ public class PlayerInputHandler : MonoBehaviour
     public event Action UtilityPerformed, UtilityCanceled;
     public event Action ReloadPerformed;
     public event Action InteractPerformed;
+    public event Action StorePerformed; // <<< NEW EVENT for Store Action
     public event Action<Vector2> LookPerformed;
     public event Action<float> ToolbarScrollPerformed;
     public event Action<int> ToolbarSlotSelected;
-    public event Action ToggleInventoryPerformed; // Only from Gameplay Map
-    public event Action ToggleMenuPerformed;      // Only from Gameplay Map
+    public event Action ToggleInventoryPerformed;
+    public event Action ToggleMenuPerformed;
 
     // UI Control Events
-    public event Action UITabNavigatePerformed;   // For Tab within UI map
-    public event Action UICancelPerformed;        // From UI Map
+    public event Action UITabNavigatePerformed;
+    public event Action UICancelPerformed;
 
     // State Properties
     public bool IsSprintHeld { get; private set; }
@@ -42,6 +43,7 @@ public class PlayerInputHandler : MonoBehaviour
         {
              Debug.LogError("PlayerInput component missing on this GameObject!", this);
              this.enabled = false;
+             return; // Added return
         }
     }
 
@@ -49,7 +51,7 @@ public class PlayerInputHandler : MonoBehaviour
     {
         if (playerInput == null || playerInput.actions == null) return;
 
-        // Gameplay Actions Subs
+        // --- Gameplay Actions Subs ---
         SubscribeToAction("Gameplay", "Move", HandleMovePerformed, HandleMoveCanceled);
         SubscribeToAction("Gameplay", "Look", HandleLookPerformed);
         SubscribeToAction("Gameplay", "Jump", HandleJumpPerformed);
@@ -61,21 +63,23 @@ public class PlayerInputHandler : MonoBehaviour
         SubscribeToAction("Gameplay", "Utility", HandleUtilityPerformed, HandleUtilityCanceled);
         SubscribeToAction("Gameplay", "Reload", HandleReloadPerformed);
         SubscribeToAction("Gameplay", "Interact", HandleInteractPerformed);
+        SubscribeToAction("Gameplay", "Store", HandleStorePerformed); // <<< SUBSCRIBE TO NEW ACTION
         SubscribeToAction("Gameplay", "ToolbarScroll", HandleToolbarScrollPerformed);
         SubscribeToAction("Gameplay", "ToggleInventory", HandleToggleInventoryPerformed);
         SubscribeToAction("Gameplay", "ToggleMenu", HandleToggleMenuPerformed);
 
         // Toolbar Slots Subs
         InputActionMap gameplayMap = playerInput.actions.FindActionMap("Gameplay");
-        if (gameplayMap != null)
-        {
+        if (gameplayMap != null) {
             for (int i = 1; i <= 9; i++) {
                 InputAction action = gameplayMap.FindAction($"ToolbarSlot{i}");
                 if (action != null) { int slotIndex = i - 1; action.performed += ctx => HandleToolbarSlotSelected(slotIndex); }
+                 else { Debug.LogWarning($"ToolbarSlot{i} action not found in Input Actions.", this); } // Added warning
             }
-        }
+        } else { Debug.LogError("Gameplay Action Map not found!", this); }
 
-        // UI Actions Subs
+
+        // --- UI Actions Subs ---
         SubscribeToAction("UI", "Cancel", HandleUICancelPerformed);
         SubscribeToAction("UI", "UITabNavigate", HandleUITabNavigatePerformed);
     }
@@ -84,7 +88,7 @@ public class PlayerInputHandler : MonoBehaviour
     {
         if (playerInput == null || playerInput.actions == null) return;
 
-        // Gameplay Actions Unsubs
+        // --- Gameplay Actions Unsubs ---
         UnsubscribeFromAction("Gameplay", "Move", HandleMovePerformed, HandleMoveCanceled);
         UnsubscribeFromAction("Gameplay", "Look", HandleLookPerformed);
         UnsubscribeFromAction("Gameplay", "Jump", HandleJumpPerformed);
@@ -96,15 +100,27 @@ public class PlayerInputHandler : MonoBehaviour
         UnsubscribeFromAction("Gameplay", "Utility", HandleUtilityPerformed, HandleUtilityCanceled);
         UnsubscribeFromAction("Gameplay", "Reload", HandleReloadPerformed);
         UnsubscribeFromAction("Gameplay", "Interact", HandleInteractPerformed);
+        UnsubscribeFromAction("Gameplay", "Store", HandleStorePerformed); // <<< UNSUBSCRIBE FROM NEW ACTION
         UnsubscribeFromAction("Gameplay", "ToolbarScroll", HandleToolbarScrollPerformed);
         UnsubscribeFromAction("Gameplay", "ToggleInventory", HandleToggleInventoryPerformed);
         UnsubscribeFromAction("Gameplay", "ToggleMenu", HandleToggleMenuPerformed);
 
-        // UI Actions Unsubs
+        // Toolbar Slot Unsubs (Simplified - assumes playerInput handles this internally on disable/destroy)
+         InputActionMap gameplayMap = playerInput.actions?.FindActionMap("Gameplay"); // Safe navigation
+         if (gameplayMap != null) {
+             for (int i = 1; i <= 9; i++) {
+                 InputAction action = gameplayMap.FindAction($"ToolbarSlot{i}");
+                 if (action != null) {
+                     // This is complex as we don't store the lambda easily.
+                     // Relying on PlayerInput's own cleanup is often sufficient.
+                     // Or use a more robust event management system if needed.
+                 }
+             }
+         }
+
+        // --- UI Actions Unsubs ---
         UnsubscribeFromAction("UI", "Cancel", HandleUICancelPerformed);
         UnsubscribeFromAction("UI", "UITabNavigate", HandleUITabNavigatePerformed);
-
-        // Unsubscribe Toolbar Slots (optional - depends on lifecycle)
     }
 
     // --- Action Handler Methods ---
@@ -128,6 +144,7 @@ public class PlayerInputHandler : MonoBehaviour
     private void HandleUtilityCanceled(InputAction.CallbackContext ctx) => UtilityCanceled?.Invoke();
     private void HandleReloadPerformed(InputAction.CallbackContext ctx) => ReloadPerformed?.Invoke();
     private void HandleInteractPerformed(InputAction.CallbackContext ctx) => InteractPerformed?.Invoke();
+    private void HandleStorePerformed(InputAction.CallbackContext ctx) => StorePerformed?.Invoke(); // <<< NEW HANDLER
     private void HandleToolbarScrollPerformed(InputAction.CallbackContext ctx) {
         float scrollY = ctx.ReadValue<Vector2>().y;
         if (Mathf.Abs(scrollY) > 0.01f) ToolbarScrollPerformed?.Invoke(Mathf.Sign(scrollY));
@@ -143,6 +160,27 @@ public class PlayerInputHandler : MonoBehaviour
     public void EnableUIControls() => playerInput?.SwitchCurrentActionMap("UI");
 
     // --- Helper Methods for Sub/Unsub ---
-    private void SubscribeToAction(string m, string a, Action<InputAction.CallbackContext> p = null, Action<InputAction.CallbackContext> c = null, Action<InputAction.CallbackContext> s = null) { var act = playerInput?.actions?.FindActionMap(m)?.FindAction(a); if (act != null) { if (s != null) act.started += s; if (p != null) act.performed += p; if (c != null) act.canceled += c; } }
-    private void UnsubscribeFromAction(string m, string a, Action<InputAction.CallbackContext> p = null, Action<InputAction.CallbackContext> c = null, Action<InputAction.CallbackContext> s = null) { var act = playerInput?.actions?.FindActionMap(m)?.FindAction(a); if (act != null) { if (s != null) act.started -= s; if (p != null) act.performed -= p; if (c != null) act.canceled -= c; } }
+    private void SubscribeToAction(string mapName, string actionName, Action<InputAction.CallbackContext> performed = null, Action<InputAction.CallbackContext> canceled = null, Action<InputAction.CallbackContext> started = null) {
+        var action = playerInput?.actions?.FindActionMap(mapName)?.FindAction(actionName);
+        if (action != null) {
+            if (started != null) action.started += started;
+            if (performed != null) action.performed += performed;
+            if (canceled != null) action.canceled += canceled;
+        } else {
+            Debug.LogWarning($"Action '{actionName}' not found in map '{mapName}' during subscription.", this);
+        }
+    }
+    private void UnsubscribeFromAction(string mapName, string actionName, Action<InputAction.CallbackContext> performed = null, Action<InputAction.CallbackContext> canceled = null, Action<InputAction.CallbackContext> started = null) {
+         // Check playerInput and actions validity before proceeding
+        if (playerInput == null || playerInput.actions == null) return;
+
+        var action = playerInput.actions.FindActionMap(mapName)?.FindAction(actionName);
+        if (action != null) {
+            // Use ?. operator for safe unsubscription
+             if (started != null) action.started -= started;
+             if (performed != null) action.performed -= performed;
+             if (canceled != null) action.canceled -= canceled;
+        }
+         // No warning on unsubscribe if not found, might have already unsubscribed or never subscribed.
+    }
 }

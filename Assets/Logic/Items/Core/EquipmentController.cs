@@ -1,98 +1,107 @@
+// Assets/Logic/Items/Core/EquipmentController.cs
 using UnityEngine;
 using System.Collections.Generic;
-using System; // Keep for Action
-
-// Removed namespace
+using System;
+using System.Linq;
 
 [DisallowMultipleComponent]
-public class EquipmentController : MonoBehaviour
-{
+public class EquipmentController : MonoBehaviour {
+
     [Header("Core Setup")]
-    [Tooltip("The Transform under which equipment viewmodels will be instantiated and managed.")]
     [SerializeField] private Transform itemHolder;
-    [Tooltip("Assign the EquipmentRegistry Scriptable Object asset here.")]
     [SerializeField] private EquipmentRegistry equipmentRegistry;
 
     [Header("Animation (Optional)")]
     [SerializeField] private EquipTransitionAnimator equipAnimator;
 
-    // Runtime References & State
-    private IEquipmentHolder _equipmentHolder; // Provides inventory context and equip events
-    private readonly Dictionary<string, RuntimeEquippable> _instantiatedEquipmentCache = new(); // Cache instantiated prefabs by ItemCode
-    private RuntimeEquippable _currentActiveEquipment; // The currently visible/active equipment instance
-    private IItemInputReceiver _currentInputReceiver; // Cached input receiver of the active equipment
-    private InventoryItem _equippedItemLogical; // The logical InventoryItem currently equipped
+    private IEquipmentHolder _equipmentHolder;
+    private IAimProvider _aimProvider;
 
-    public InventoryItem EquippedItem => _equippedItemLogical; // Expose the logical item
+    private readonly Dictionary<string, RuntimeEquippable> _instantiatedEquipmentCache = new();
+    private RuntimeEquippable _currentActiveEquipment;
+    private IItemInputReceiver _currentInputReceiver;
+    private InventoryItem _equippedItemLogical;
 
-    private void Awake()
-    {
-        // 1. Validate Core Setup
+    public InventoryItem EquippedItemLogical => _equippedItemLogical;
+    public RuntimeEquippable CurrentVisualEquipment => _currentActiveEquipment;
+    public EquippableBehavior CurrentEquippableBehavior => _currentActiveEquipment?.GetComponent<EquippableBehavior>();
+
+
+    private void Awake() {
         if (itemHolder == null) Debug.LogError("[EquipmentController] Item Holder Transform is not assigned!", this);
         if (equipmentRegistry == null) Debug.LogError("[EquipmentController] Equipment Registry SO is not assigned!", this);
 
-        // 2. Find Player Manager & Equipment Holder (Inventory)
+        // Attempt to get contexts from PlayerManager or fallback
         PlayerManager playerManager = GetComponentInParent<PlayerManager>();
-        if (playerManager != null)
-        {
-            _equipmentHolder = playerManager.Inventory; // Get IEquipmentHolder via PlayerManager
-            if (_equipmentHolder == null)
-            {
-                Debug.LogError("[EquipmentController] Found PlayerManager, but its 'Inventory' property is null or invalid!", this);
-            }
-        }
-        else
-        {
-            Debug.LogError("[EquipmentController] Could not find PlayerManager component in parent hierarchy!", this);
+        if (playerManager != null) {
+            _equipmentHolder = playerManager.Inventory; // PlayerInventory implements IEquipmentHolder
+            _aimProvider = playerManager.Look as IAimProvider; // PlayerLook implements IAimProvider
+
+            if (_equipmentHolder == null) Debug.LogError($"[EC on {gameObject.name}] PlayerManager's 'Inventory' (IEquipmentHolder) is null on {playerManager.name}!", this);
+            if (_aimProvider == null && playerManager.Look != null) Debug.LogError($"[EC on {gameObject.name}] PlayerManager's 'Look' on {playerManager.Look.name} does not implement IAimProvider!", this);
+            else if(_aimProvider == null && playerManager.Look == null) Debug.LogWarning($"[EC on {gameObject.name}] PlayerManager ({playerManager.name}) has a null 'Look' component.", this);
+
+        } else { // Fallback if no PlayerManager
+            _equipmentHolder = GetComponentInParent<PlayerInventory>(true);
+            _aimProvider = GetComponentInParent<PlayerLook>(true);
+            Debug.LogWarning($"[EC on {gameObject.name}] PlayerManager not found in parent. Using fallback GetComponentInParent searches. This might be problematic for AI or other setups.", this);
         }
 
-        // 3. Pre-Instantiate Fallback/Unarmed State (Highly Recommended)
-        // This ensures the "hands" are ready immediately without delay on first unequip/start.
-        if (equipmentRegistry != null && equipmentRegistry.FallbackPrefab != null)
-        {
-            // Check if it needs instantiation (it shouldn't be in the cache yet)
-            string fallbackCode = equipmentRegistry.FallbackPrefab.ItemCode;
-            if (!string.IsNullOrEmpty(fallbackCode) && !_instantiatedEquipmentCache.ContainsKey(fallbackCode))
-            {
-                InstantiateAndCacheEquipment(equipmentRegistry.FallbackPrefab);
-                 // We don't activate it here, Equip will handle the initial state.
+        if (_equipmentHolder == null) Debug.LogError($"[EC on {gameObject.name}] CRITICAL: Could not find IEquipmentHolder component!", this);
+        if (_aimProvider == null) Debug.LogError($"[EC on {gameObject.name}] CRITICAL: Could not find IAimProvider component!", this);
+        if (equipmentRegistry == null) { Debug.LogError($"[EC on {gameObject.name}] CRITICAL: EquipmentRegistry is null!", this); this.enabled = false; return; }
+
+        // Instantiate and cache fallback/hands prefab
+        if (equipmentRegistry.FallbackPrefab != null) {
+            RuntimeEquippable fallbackPrefab = equipmentRegistry.FallbackPrefab;
+            string fallbackCacheKey = !string.IsNullOrEmpty(fallbackPrefab.ItemCode) ? fallbackPrefab.ItemCode : fallbackPrefab.name;
+            if(string.IsNullOrEmpty(fallbackCacheKey)) {
+                 Debug.LogWarning($"[EC on {gameObject.name}] Fallback Prefab '{fallbackPrefab}' has no ItemCode/name. Using InstanceID.", fallbackPrefab);
+                 fallbackCacheKey = fallbackPrefab.GetInstanceID().ToString();
             }
-            else if(string.IsNullOrEmpty(fallbackCode))
-            {
-                 Debug.LogError("[EquipmentController] Fallback Prefab in Registry is missing its Item Code!", equipmentRegistry.FallbackPrefab);
+            if (!string.IsNullOrEmpty(fallbackCacheKey) && !_instantiatedEquipmentCache.ContainsKey(fallbackCacheKey)) {
+                 InstantiateAndCacheEquipment(fallbackPrefab, fallbackCacheKey);
             }
-        }
-        else if (equipmentRegistry != null && equipmentRegistry.FallbackPrefab == null)
-        {
-             Debug.LogWarning("[EquipmentController] No Fallback Prefab assigned in the Equipment Registry.", this);
+        } else { Debug.LogWarning($"[EC on {gameObject.name}] No Fallback Prefab assigned in Equipment Registry.", this); }
+    }
+
+    // Called by PlayerManager.Start() to ensure dependencies are ready
+    public void ManualStart() {
+        if (_equipmentHolder != null) {
+            _equipmentHolder.OnEquippedItemChanged -= HandleEquipRequest;
+            _equipmentHolder.OnEquippedItemChanged += HandleEquipRequest;
+
+            // Check if holder is ready before getting current item
+            if (_equipmentHolder is PlayerInventory pi && pi.Container == null) {
+                 Debug.LogError($"[EC ManualStart on {gameObject.name}] EquipmentHolder ({_equipmentHolder.GetType().Name}) is PlayerInventory, but its Container is NULL. Cannot perform initial equip. Check PlayerInventory setup.", _equipmentHolder as MonoBehaviour);
+                 HandleEquipRequest(null); // Default to hands if container isn't ready
+            } else {
+                 HandleEquipRequest(_equipmentHolder.GetCurrentEquippedItem());
+            }
+        } else {
+             Debug.LogError($"[EC ManualStart on {gameObject.name}] CRITICAL: IEquipmentHolder is null! Cannot subscribe or perform initial equip.", this);
         }
     }
 
-    private void OnEnable()
-    {
-        // Subscribe to the event that signals the logical equipped item has changed
-        if (_equipmentHolder != null)
-        {
+    private void OnEnable() {
+        // It's generally safer for PlayerManager.Start to call ManualStart after all Awakes.
+        // If this component can be enabled/disabled at runtime independently:
+        if (Application.isPlaying && _equipmentHolder != null) {
+            // Re-subscribe and re-equip if being re-enabled
+            // This assumes ManualStart (or equivalent logic) has run at least once initially.
+            _equipmentHolder.OnEquippedItemChanged -= HandleEquipRequest;
             _equipmentHolder.OnEquippedItemChanged += HandleEquipRequest;
-            // Immediately sync with the current state when enabled
             HandleEquipRequest(_equipmentHolder.GetCurrentEquippedItem());
         }
     }
 
-    private void OnDisable()
-    {
-        // Unsubscribe when disabled/destroyed
-        if (_equipmentHolder != null)
-        {
+    private void OnDisable() {
+         if (_equipmentHolder != null) {
             _equipmentHolder.OnEquippedItemChanged -= HandleEquipRequest;
         }
-        // Optionally clear cache or destroy instantiated objects on disable/destroy if needed
-        // ClearInstantiatedCache();
     }
 
-    // --- Input Handling Methods (Called by PlayerManager) ---
-    // These methods pass input down to the currently active equipment's InputReceiver
-
+    // --- Input Forwarding ---
     public void HandleFire1Down() => PassInput(r => r.OnFire1Down());
     public void HandleFire1Up() => PassInput(r => r.OnFire1Up());
     public void HandleFire1Hold() => PassInput(r => r.OnFire1Hold());
@@ -100,168 +109,119 @@ public class EquipmentController : MonoBehaviour
     public void HandleFire2Up() => PassInput(r => r.OnFire2Up());
     public void HandleFire2Hold() => PassInput(r => r.OnFire2Hold());
     public void HandleReloadDown() => PassInput(r => r.OnReloadDown());
+    public void HandleStoreDown() => PassInput(r => r.OnStoreDown());
     public void HandleUtilityDown() => PassInput(r => r.OnUtilityDown());
     public void HandleUtilityUp() => PassInput(r => r.OnUtilityUp());
 
-    private void PassInput(Action<IItemInputReceiver> inputAction)
-    {
-        if (_currentInputReceiver != null)
-        {
-            inputAction?.Invoke(_currentInputReceiver);
+    private void PassInput(Action<IItemInputReceiver> inputAction) {
+        if (_currentActiveEquipment != null && _currentActiveEquipment.gameObject.activeSelf) {
+             _currentInputReceiver = _currentActiveEquipment.GetComponent<IItemInputReceiver>();
+             if (_currentInputReceiver != null) {
+                inputAction?.Invoke(_currentInputReceiver);
+             }
         }
     }
 
-    // --- Equip Flow ---
-
-    // Called when the IEquipmentHolder signals a change in the equipped item
-    private void HandleEquipRequest(InventoryItem newItem)
-    {
-        //Debug.Log($"[EquipmentController] HandleEquipRequest received item: {newItem?.data?.itemName ?? "NULL"}. Cached: {_equippedItemLogical?.data?.itemName ?? "NULL"}"); // <<< ADD LOG
-
-        if (newItem == _equippedItemLogical && _currentActiveEquipment != null)
-        {
-            //Debug.Log("[EquipmentController] Item is the same instance as current. No change."); // <<< ADD LOG
-            return;
-        }
-        Equip(newItem);
+    private void HandleEquipRequest(InventoryItem newItemFromInventory) {
+        _equippedItemLogical = newItemFromInventory; // Store the logical item
+        Equip(_equippedItemLogical);
     }
 
-    private void Equip(InventoryItem itemToEquip)
-    {
-        //Debug.Log($"[EquipmentController] Equip method called for item: {itemToEquip?.data?.itemName ?? "NULL"}"); // <<< ADD LOG
-        
-        // 1. Determine the Target Prefab using the Registry
-        RuntimeEquippable targetPrefab = equipmentRegistry?.GetPrefabForItem(itemToEquip?.data); // Handles null itemToEquip
+    private RuntimeEquippable DetermineTargetPrefab(InventoryItem item) {
+        if (equipmentRegistry == null) {
+            Debug.LogError($"[EC DetermineTargetPrefab on {gameObject.name}] EquipmentRegistry is null!", this);
+            return null;
+        }
+        if (item == null || item.data == null) return equipmentRegistry.FallbackPrefab;
 
-        if (targetPrefab == null)
-        {
-            //Debug.LogError($"[EquipmentController] Cannot equip item '{itemToEquip?.data?.itemName ?? "NULL"}'. No suitable prefab found in registry (including fallback)!", this);
-            // Attempt to disable current item if possible
-            if (_currentActiveEquipment != null)
-            {
-                 _currentActiveEquipment.gameObject.SetActive(false);
-                 _currentActiveEquipment = null;
-                 _currentInputReceiver = null;
+        // Special handling for CarPartData - usually falls back to Hands unless a specific "carryable part" viewmodel exists
+        if (item.data is CarPartData) {
+            // If you ever wanted a specific viewmodel FOR HOLDING a car part (e.g. carrying an engine block visually)
+            // you could register that. Otherwise, it defaults to FallbackPrefab (Hands).
+            RuntimeEquippable specificCarPartPrefab = equipmentRegistry.GetPrefabForItem(item.data);
+            if (specificCarPartPrefab == equipmentRegistry.FallbackPrefab || specificCarPartPrefab == null) {
+                return equipmentRegistry.FallbackPrefab;
             }
-            _equippedItemLogical = itemToEquip; // Update logical item anyway
-            return;
+            return specificCarPartPrefab; // This case is rare for CarPartData unless it's a tool-like part.
         }
+        return equipmentRegistry.GetPrefabForItem(item.data);
+    }
 
-        // 2. Get or Instantiate the Target Instance
-        RuntimeEquippable targetInstance = GetOrCreateInstance(targetPrefab);
-
-        if (targetInstance == null)
-        {
-             //Debug.LogError($"[EquipmentController] Failed to get or create instance for prefab '{targetPrefab.name}'.", this);
-             // Attempt to disable current item
+    private void Equip(InventoryItem itemToEquipLogically) {
+        RuntimeEquippable targetPrefab = DetermineTargetPrefab(itemToEquipLogically);
+        if (targetPrefab == null) {
+             Debug.LogError($"[EC Equip on {gameObject.name}] CRITICAL: No target prefab for '{itemToEquipLogically?.data?.itemName ?? "NULL"}' (even FallbackPrefab is null). EC may be disabled or broken.", this);
              if (_currentActiveEquipment != null) _currentActiveEquipment.gameObject.SetActive(false);
-             _currentActiveEquipment = null;
-             _currentInputReceiver = null;
-             _equippedItemLogical = itemToEquip;
+             _currentActiveEquipment = null; _currentInputReceiver = null;
+             // Consider disabling this.enabled = false; if this state is unrecoverable.
              return;
         }
 
+        EquippableBehavior currentBehavior = CurrentEquippableBehavior;
+        if (_currentActiveEquipment != null &&
+            _currentActiveEquipment.name == targetPrefab.name && // Check if visual prefab is the same
+            currentBehavior != null &&
+            currentBehavior.RuntimeItemInstance == itemToEquipLogically) { // Check if logical item is the same
+            return; // Already equipped this exact item and visual
+        }
 
-        // 3. Deactivate the *Currently Active* Equipment (if it exists and is different)
-        if (_currentActiveEquipment != null && _currentActiveEquipment != targetInstance)
-        {
+        RuntimeEquippable targetInstance = GetOrCreateInstance(targetPrefab);
+        if (targetInstance == null) {
+             Debug.LogError($"[EC Equip on {gameObject.name}] Failed to get or create instance for '{targetPrefab.name}'. Aborting equip.", this);
+             if (_currentActiveEquipment != null) _currentActiveEquipment.gameObject.SetActive(false);
+             _currentActiveEquipment = null; _currentInputReceiver = null;
+             return;
+        }
+
+        if (_currentActiveEquipment != null && _currentActiveEquipment != targetInstance) {
             _currentActiveEquipment.gameObject.SetActive(false);
         }
 
-        // 4. Activate the Target Equipment Instance
         _currentActiveEquipment = targetInstance;
-        if (!_currentActiveEquipment.gameObject.activeSelf)
-        {
+        if (!_currentActiveEquipment.gameObject.activeSelf) {
             _currentActiveEquipment.gameObject.SetActive(true);
         }
 
-        // 5. Initialize the Instance with Item Data
-        // Pass the logical item (even if null for unarmed) and the inventory container
-        _currentActiveEquipment.Initialize(itemToEquip, _equipmentHolder?.GetContainerForInventory());
-
-        // 6. Cache Input Receiver
+        // Call Initialize with the simplified signature
+        _currentActiveEquipment.Initialize(itemToEquipLogically, _equipmentHolder, _aimProvider);
         _currentInputReceiver = _currentActiveEquipment.GetComponent<IItemInputReceiver>();
 
-        // 7. Update Logical Item Cache
-        _equippedItemLogical = itemToEquip;
-
-        // 8. Play Animation (Optional)
-        if (equipAnimator) equipAnimator.Play(null); // Adapt payload if needed
-
-        // Debug.Log($"Equipped: {targetInstance.ItemCode} (Prefab: {targetPrefab.name})");
+        if (equipAnimator) equipAnimator.Play(null);
     }
 
-    // --- Instantiation and Caching Logic ---
-
-    /// <summary>
-    /// Gets an existing instance from the cache or instantiates and caches a new one.
-    /// </summary>
-    private RuntimeEquippable GetOrCreateInstance(RuntimeEquippable prefab)
-    {
-        if (prefab == null || string.IsNullOrEmpty(prefab.ItemCode))
-        {
-            Debug.LogError("[EquipmentController] Cannot get/create instance: Prefab is null or missing ItemCode.", prefab);
-            return null;
+    private RuntimeEquippable GetOrCreateInstance(RuntimeEquippable prefab) {
+        if (prefab == null) { Debug.LogError($"[EC GetOrCreateInstance on {gameObject.name}] Prefab is null.", this); return null; }
+        string cacheKey = !string.IsNullOrEmpty(prefab.ItemCode) ? prefab.ItemCode : prefab.name;
+        if(string.IsNullOrEmpty(cacheKey)) {
+             Debug.LogWarning($"[EC GetOrCreateInstance on {gameObject.name}] Prefab '{prefab}' using InstanceID as cache key.", prefab);
+             cacheKey = prefab.GetInstanceID().ToString();
         }
 
-        // Try to get from cache first
-        if (_instantiatedEquipmentCache.TryGetValue(prefab.ItemCode, out RuntimeEquippable cachedInstance))
-        {
-             // Important: Ensure the cached instance isn't destroyed or null
-             if (cachedInstance != null) {
-                 return cachedInstance;
-             } else {
-                  // Instance was destroyed somehow, remove from cache
-                  _instantiatedEquipmentCache.Remove(prefab.ItemCode);
-                  Debug.LogWarning($"Cached instance for '{prefab.ItemCode}' was null/destroyed. Re-instantiating.");
-             }
+        if (_instantiatedEquipmentCache.TryGetValue(cacheKey, out RuntimeEquippable cachedInstance)) {
+            if (cachedInstance != null) return cachedInstance;
+            else {
+                 _instantiatedEquipmentCache.Remove(cacheKey);
+                 Debug.LogWarning($"[EC GetOrCreateInstance on {gameObject.name}] Cached instance '{cacheKey}' was destroyed. Re-instantiating.", this);
+            }
         }
-
-        // If not in cache or was destroyed, instantiate it now
-        return InstantiateAndCacheEquipment(prefab);
+        return InstantiateAndCacheEquipment(prefab, cacheKey);
     }
 
-    /// <summary>
-    /// Instantiates the equipment prefab, parents it, disables it, and adds it to the cache.
-    /// </summary>
-    private RuntimeEquippable InstantiateAndCacheEquipment(RuntimeEquippable prefab)
-    {
-        if (prefab == null || string.IsNullOrEmpty(prefab.ItemCode) || itemHolder == null)
-        {
-             Debug.LogError($"[EquipmentController] Failed to instantiate '{prefab?.name ?? "NULL PREFAB"}' - Invalid prefab, ItemCode, or ItemHolder.", prefab);
-             return null;
-        }
-
-        // Instantiate the prefab under the item holder
+    private RuntimeEquippable InstantiateAndCacheEquipment(RuntimeEquippable prefab, string cacheKey) {
+        if (prefab == null || itemHolder == null) { Debug.LogError($"[EC InstantiateAndCache on {gameObject.name}] Instantiate fail: Null prefab or itemHolder.", prefab); return null; }
         RuntimeEquippable newInstance = Instantiate(prefab, itemHolder);
-        newInstance.gameObject.name = prefab.name; // Keep original name for clarity in hierarchy
-
-        // Start disabled - Equip method will activate it
-        newInstance.gameObject.SetActive(false);
-
-        // Add to cache using the ItemCode from the prefab's RuntimeEquippable component
-        _instantiatedEquipmentCache[prefab.ItemCode] = newInstance;
-
-        // Debug.Log($"Instantiated and cached: {newInstance.ItemCode}");
+        newInstance.gameObject.name = prefab.name; // Keep prefab name for easier identification
+        newInstance.gameObject.SetActive(false); // Start inactive, Equip will activate
+        _instantiatedEquipmentCache[cacheKey] = newInstance;
         return newInstance;
     }
 
-    /// <summary>
-    /// (Optional) Clears the cache and destroys instantiated GameObjects.
-    /// Call this on scene changes or player destruction if necessary.
-    /// </summary>
-    public void ClearInstantiatedCache()
-    {
-         foreach(var kvp in _instantiatedEquipmentCache)
-         {
-             if (kvp.Value != null) // Check if it wasn't already destroyed
-             {
-                 Destroy(kvp.Value.gameObject);
-             }
-         }
-         _instantiatedEquipmentCache.Clear();
-         _currentActiveEquipment = null; // Reset references
-         _currentInputReceiver = null;
-         //Debug.Log("Equipment cache cleared.");
+    public void ClearInstantiatedCache() {
+        foreach (var kvp in _instantiatedEquipmentCache.ToList()) { // ToList allows modification during iteration
+            if (kvp.Value != null) Destroy(kvp.Value.gameObject);
+        }
+        _instantiatedEquipmentCache.Clear();
+        _currentActiveEquipment = null;
+        _currentInputReceiver = null;
     }
 }

@@ -71,4 +71,4 @@ MonoBehaviour:
   attachmentSlots: 2
   defaultAttachments:
   - mountPointTag: SightMount
-    defaultPrefab: {fileID: 1154840838700442743, guid: 720842e40cc7c294f96dad9e25ee1a49, type: 3}
+    defaultPrefab: {fileID: 8960900166630889875, guid: 720842e40cc7c294f96dad9e25ee1a49, type: 3}

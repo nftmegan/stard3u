@@ -17,7 +17,7 @@ public class AttachmentController : MonoBehaviour
 
     // --- References Set by FirearmBehavior ---
     private FirearmItemData def;
-    private FirearmState state;
+    private FirearmRuntimeState state;
     private RecoilHandler recoilHandler;
     private ADSController adsController;
     private SpreadHandler spreadController;
@@ -33,7 +33,7 @@ public class AttachmentController : MonoBehaviour
 
     // --- Initialization & Lifecycle ---
     private void Awake() { CacheMountPoints(); }
-    public void Initialize(FirearmState firearmState, FirearmItemData firearmDef, RecoilHandler recoilH, ADSController adsCtrl, SpreadHandler spreadCtrl) { this.state = firearmState; this.def = firearmDef; this.recoilHandler = recoilH; this.adsController = adsCtrl; this.spreadController = spreadCtrl; _isInitialized = false; ValidateInitializationReferences(); ClearDefaultAttachmentVisuals(); ClearRealAttachmentsVisuals(); InstantiateAllDefaultAttachments(); UnsubscribeFromAttachmentChanges(); SubscribeToAttachmentChanges(); RefreshAllAttachments(); if (adsController != null) { adsController.ForceStopAiming(); if (_currentWeaponAimPoint != null) { adsController.SetWeaponAimPoint(_currentWeaponAimPoint); adsController.SetCameraAnchorOffset(_currentCameraAnchorOffset); } else { Debug.LogError($"[{GetType().Name} on '{this.gameObject.name}'] Post-Initialize: Cannot SetWeaponAimPoint - No aim point found!", this); } } _isInitialized = true; }
+    public void Initialize(FirearmRuntimeState firearmState, FirearmItemData firearmDef, RecoilHandler recoilH, ADSController adsCtrl, SpreadHandler spreadCtrl) { this.state = firearmState; this.def = firearmDef; this.recoilHandler = recoilH; this.adsController = adsCtrl; this.spreadController = spreadCtrl; _isInitialized = false; ValidateInitializationReferences(); ClearDefaultAttachmentVisuals(); ClearRealAttachmentsVisuals(); InstantiateAllDefaultAttachments(); UnsubscribeFromAttachmentChanges(); SubscribeToAttachmentChanges(); RefreshAllAttachments(); if (adsController != null) { adsController.ForceStopAiming(); if (_currentWeaponAimPoint != null) { adsController.SetWeaponAimPoint(_currentWeaponAimPoint); adsController.SetCameraAnchorOffset(_currentCameraAnchorOffset); } else { Debug.LogError($"[{GetType().Name} on '{this.gameObject.name}'] Post-Initialize: Cannot SetWeaponAimPoint - No aim point found!", this); } } _isInitialized = true; }
     private void OnEnable() { if (_isInitialized) { SetAllDefaultAttachmentsActive(true); RefreshAllAttachments(); } }
     private void OnDisable() { UnsubscribeFromAttachmentChanges(); ClearRealAttachmentsVisuals(); ClearDefaultAttachmentVisuals(); _isInitialized = false; }
 
@@ -64,7 +64,6 @@ public class AttachmentController : MonoBehaviour
         Transform finalAimPoint = null;
         AttachmentItemData sightItemData = null;
         bool usingRealSight = false;
-        string foundMethod = "None";
 
         // 1. Check REAL attachments first
         if (state?.attachments != null) {
@@ -76,7 +75,7 @@ public class AttachmentController : MonoBehaviour
                 if (data?.attachmentType == AttachmentType.Sight) {
                     var aimPointComponent = instance.GetComponentInChildren<AttachmentAimPoint>(true);
                     if (aimPointComponent != null) {
-                        finalAimPoint = aimPointComponent.transform; sightItemData = data; usingRealSight = true; foundMethod = "Real Attachment"; break;
+                        finalAimPoint = aimPointComponent.transform; sightItemData = data; usingRealSight = true; break;
                     } else { Debug.LogWarning($"Real Sight '{data.itemName}' missing AttachmentAimPoint component!", instance); }
                 }
             }
@@ -88,7 +87,6 @@ public class AttachmentController : MonoBehaviour
                  var defaultAimPointComponent = defaultInstance.GetComponentInChildren<AttachmentAimPoint>(true);
                  if (defaultAimPointComponent != null) {
                      finalAimPoint = defaultAimPointComponent.transform; // Use default aim point
-                     foundMethod = "Default Attachment Prefab";
                  } else { Debug.LogWarning($"Default attachment on 'SightMount' ({defaultInstance.name}) is missing AttachmentAimPoint component!", defaultInstance); }
             }
         }

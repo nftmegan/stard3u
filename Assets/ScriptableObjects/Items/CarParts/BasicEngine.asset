@@ -1,0 +1,77 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4a14c53fb574e446b8243ecfaad4985, type: 3}
+  m_Name: BasicEngine
+  m_EditorClassIdentifier: 
+  itemName: Basic Engine
+  itemCode: basic_engine
+  sprite: {fileID: 21300000, guid: d622a7522d8c6d74f985656e2e93970b, type: 3}
+  description: Just a basic engine
+  category: 6
+  worldPrefab: {fileID: 5821096121859729017, guid: f1a1ed081ac2d3540bfa3c9089280a1e, type: 3}
+  stackable: 0
+  maxStack: 1
+  weightKg: 0.1
+  isBulky: 0
+  baseMaxDurability: 100
+  partTypeEnum: 2
+  providedMountPoints:
+  - mountPointID: 
+    localPosition: {x: 0, y: 0, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 0}
+    acceptedPartTypes: 07000000
+    requiredInterfaces: []
+    connectionType: 0
+    gizmoRadius: 0.2
+    gizmoColor: {r: 1, g: 0, b: 0, a: 0}
+  torqueCurveNmVsRPM:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 1.2869185
+      outSlope: 1.2869185
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 0.6164377
+      value: 0.79330504
+      inSlope: 0.44061184
+      outSlope: 0.44061184
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 0.9991455
+      value: 0.63804245
+      inSlope: -0.40569484
+      outSlope: -0.40569484
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  maxRPM: 7000
+  idleRPM: 800
+  inertiaKgM2: 0.5
+  fuelConsumptionLitersPerFixedTickAtFullLoad: 0.01
+  oilCapacityLiters: 5
+  coolantCapacityLiters: 7
+  idealOperatingTemperatureCelsius: 90
+  overheatTemperatureCelsius: 120
+  engineOutputShaftMountID: EngineOutput
