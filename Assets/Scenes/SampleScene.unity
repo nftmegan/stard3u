@@ -376,6 +376,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraPivot: {fileID: 1833460194}
+  yawRoot: {fileID: 0}
   sensitivityX: 0.1
   sensitivityY: 0.1
   minPitch: -80
@@ -1246,6 +1247,7 @@ GameObject:
   - component: {fileID: 226479345}
   - component: {fileID: 226479344}
   - component: {fileID: 226479346}
+  - component: {fileID: 226479347}
   m_Layer: 0
   m_Name: PlayerManager
   m_TagString: Untagged
@@ -1291,6 +1293,7 @@ MonoBehaviour:
   equipmentController: {fileID: 55266173}
   worldInteractor: {fileID: 226479344}
   inputHandler: {fileID: 1194012888}
+  grabController: {fileID: 0}
   inventoryUIManager: {fileID: 1797844032}
   uiStateController: {fileID: 226479345}
   uiPanelRegistry: {fileID: 1029575392}
@@ -1337,11 +1340,40 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   detectionRange: 3
-  interactableLayerMask:
+  detectionLayerMask:
     serializedVersion: 2
     m_Bits: 128
   highlightColor: {r: 0, g: 1, b: 0, a: 1}
   playerCameraTransform: {fileID: 89260858}
+--- !u!114 &226479347
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 226479336}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ad95eb34846b6e40aae8bfe7e822637, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  interactionReach: 3
+  mountPointLayerMask:
+    serializedVersion: 2
+    m_Bits: 512
+  grabbableLayerMask:
+    serializedVersion: 2
+    m_Bits: 256
+  grabTargetCollisionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  itemFollowSpeed: 20
+  itemManualRotationSpeed: 200
+  itemHoldDistanceDefault: 1.5
+  itemHoldDistanceMin: 0.75
+  itemHoldDistanceMax: 4
+  itemScrollSpeed: 0.3
+  collisionPullbackOffset: 0.1
 --- !u!1 &275117421
 GameObject:
   m_ObjectHideFlags: 0
@@ -11139,8 +11171,6 @@ MonoBehaviour:
     <CurrentDurability>k__BackingField: 100
     <CurrentWear>k__BackingField: 0
     currentGear: 0
-    isShifting: 0
-    shiftTimer: 0
 --- !u!224 &1957565519 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 1307939608157171483, guid: f1d71ba834ebd554c840faf233bbb867, type: 3}
@@ -11381,15 +11411,30 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2050124771}
-  - component: {fileID: 2050124770}
+  - component: {fileID: 2050124772}
   m_Layer: 0
   m_Name: Pistol ItemSpawner
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!114 &2050124770
+  m_IsActive: 1
+--- !u!4 &2050124771
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2050124769}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -42.42, y: -7.817, z: -13.95}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2050124772
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -11426,21 +11471,6 @@ MonoBehaviour:
     RefIds:
     - rid: -2
       type: {class: , ns: , asm: }
---- !u!4 &2050124771
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2050124769}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -42.574, y: -7.817, z: -13.95}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!224 &2071179942 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 1307939608157171483, guid: f1d71ba834ebd554c840faf233bbb867, type: 3}

@@ -220,6 +220,24 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "RotateHeld",
+                    "type": "Button",
+                    "id": "db9ec5d7-8730-42b9-a592-95f5e7a17950",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "RotateHeldDelta",
+                    "type": "Value",
+                    "id": "91e1a1d4-cfd9-4f03-b387-06996d0aa07f",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
                 }
             ],
             "bindings": [
@@ -638,6 +656,28 @@
                     "processors": "",
                     "groups": "",
                     "action": "Store",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "22c00d84-2f46-4771-ae55-40ee15780051",
+                    "path": "<Mouse>/middleButton",
+                    "interactions": "Press,Press(behavior=1)",
+                    "processors": "",
+                    "groups": "",
+                    "action": "RotateHeld",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "7e3a05bd-3f2f-48df-be07-64ce4f29314a",
+                    "path": "<Mouse>/delta",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "RotateHeldDelta",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

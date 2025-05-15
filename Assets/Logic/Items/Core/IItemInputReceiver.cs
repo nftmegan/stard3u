@@ -12,13 +12,10 @@ public interface IItemInputReceiver
     void OnFire2Hold();
     void OnFire2Up();
 
-    // Utility (E/F)
+    // Utility (E/F) - Renamed from UtilityPerformed/Canceled for consistency
     void OnUtilityDown();
     void OnUtilityUp();
 
     // Reload (R)
     void OnReloadDown();
-
-    // Store (T) <<< NEW METHOD
-    void OnStoreDown();
 }

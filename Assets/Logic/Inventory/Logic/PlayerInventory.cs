@@ -1,4 +1,4 @@
-// Assets/Logic/Inventory/Logic/PlayerInventory.cs
+// --- Start of script: Assets/Logic/Inventory/Logic/PlayerInventory.cs ---
 using System;
 using UnityEngine;
 using System.Linq;
@@ -15,33 +15,36 @@ public class PlayerInventory : MonoBehaviour, IInventoryViewDataSource, IEquipme
 
     public event Action<int> OnSlotChanged;
     public event Action<InventoryItem> OnEquippedItemChanged;
-    // Optional Event for external systems to know when an item was pulled out
     public event Action<InventoryItem> OnItemPulledFromInventory;
 
+    private InventoryItem _equippedCache; // Cache of the item in the currently selected toolbar slot
 
     public ItemContainer GetContainerForInventory() => inventoryComp?.Container;
-    public InventoryItem GetCurrentEquippedItem() => _equippedCache;
-    public bool RequestAddItemToInventory(InventoryItem itemToAdd) { /* ... (no changes needed) ... */
+    public InventoryItem GetCurrentEquippedItem() => _equippedCache; // Return the cached item
+
+    public bool RequestAddItemToInventory(InventoryItem itemToAdd) {
         if (Container == null || itemToAdd == null || itemToAdd.data == null) {
             Debug.LogWarning("[PlayerInventory] Cannot add item - Container or item/data is null.");
             return false;
         }
         if (itemToAdd.data.isBulky) {
-            return false;
+             Debug.LogWarning($"[PlayerInventory] Cannot add bulky item '{itemToAdd.data.itemName}' to main inventory.");
+            return false; // Cannot add bulky items this way
         }
-        Container.AddItem(itemToAdd, 1);
-        bool check = Container.Slots.Any(slot => slot.item == itemToAdd);
-        if (!check && itemToAdd.IsStackable) {
-            check = Container.HasItem(itemToAdd.data);
-        }
-        if (!check) Debug.LogWarning($"[PlayerInventory] AddItem verification failed for '{itemToAdd.data.itemName}'.");
-        return check;
+        Container.AddItem(itemToAdd, itemToAdd.IsStackable ? 1 : 1); // Add appropriate quantity (usually 1)
+        // Verification after AddItem (AddItem handles logging failure)
+        bool check = Container.HasItem(itemToAdd.data); // Simpler check
+        // if (!check) Debug.LogWarning($"[PlayerInventory] AddItem verification failed for '{itemToAdd.data.itemName}'.");
+        return check; // Return true if item is now present (might have stacked)
     }
-    public bool TryStoreItemInSpecificSlot(InventoryItem itemToAdd, int slotIndex) { /* ... (no changes needed) ... */
+
+    public bool TryStoreItemInSpecificSlot(InventoryItem itemToAdd, int slotIndex) {
         if (Container == null || itemToAdd == null || itemToAdd.data == null || slotIndex < 0 || slotIndex >= Container.Size) {
             return false;
         }
-        if (itemToAdd.data.isBulky && slotIndex < (toolbarSelector?.SlotCount ?? 0)) {
+         // Check if trying to put bulky item in toolbar
+        if (itemToAdd.data.isBulky && toolbarSelector != null && slotIndex < toolbarSelector.SlotCount) {
+            Debug.LogWarning($"[PlayerInventory] Cannot store bulky item '{itemToAdd.data.itemName}' in toolbar slot {slotIndex}.");
             return false;
         }
         InventorySlot targetSlot = Container[slotIndex];
@@ -52,165 +55,230 @@ public class PlayerInventory : MonoBehaviour, IInventoryViewDataSource, IEquipme
         bool changed = false;
         if (targetSlot.IsEmpty()) {
             targetSlot.item = itemToAdd;
-            targetSlot.quantity = 1;
+            targetSlot.quantity = 1; // Assume adding one non-stackable or the first of a stack
             changed = true;
         } else if (targetSlot.item.data == itemToAdd.data && targetSlot.item.IsStackable && !targetSlot.IsFull() && itemToAdd.runtime == null && targetSlot.item.runtime == null) {
-            int added = targetSlot.AddQuantity(1);
+            int added = targetSlot.AddQuantity(1); // Add one unit
             if (added > 0) {
                 changed = true;
+                // Note: If adding stackable item, we assume itemToAdd itself isn't kept, just its data/type is used.
             }
         }
+        // else: Cannot store (slot occupied by different item, or full stackable)
+
         if (changed) {
+            // IMPORTANT: Notify listeners AFTER making the change
             this.OnSlotChanged?.Invoke(slotIndex);
-            if (toolbarSelector != null && slotIndex < toolbarSelector.SlotCount) {
-                HandleContainerSlotChangedForEquip(slotIndex);
-            }
+            // Check if the change affected the equipped item cache IMMEDIATELY
+            HandleContainerSlotChangedForEquip(slotIndex); // Ensure cache updates if toolbar affected
             return true;
         }
         return false;
     }
-    public bool CanAddItemToInventory(InventoryItem itemToCheck, int quantity = 1) { /* ... (no changes needed) ... */
+
+    public bool CanAddItemToInventory(InventoryItem itemToCheck, int quantity = 1) {
         if (Container == null || itemToCheck == null || itemToCheck.data == null) return false;
-        if (itemToCheck.data.isBulky) return false;
-        if (!itemToCheck.IsStackable || itemToCheck.runtime is IPartRuntimeState || itemToCheck.runtime != null) {
-            return Container.Slots.Any(slot => slot.IsEmpty());
-        } else {
-            int spaceAvailable = 0;
+        if (itemToCheck.data.isBulky) return false; // Cannot add bulky to main inventory this way
+
+        // Check if there's space, considering stacking
+        int remainingToAdd = quantity;
+
+        // Check existing stacks
+        if (itemToCheck.IsStackable) {
             foreach (var slot in Container.Slots) {
-                if (slot.IsEmpty()) {
-                    spaceAvailable += Mathf.Max(1, itemToCheck.data.maxStack);
-                } else if (slot.item.data == itemToCheck.data && slot.item.runtime == null) {
-                    spaceAvailable += Mathf.Max(1, slot.item.data.maxStack) - slot.quantity;
+                if (!slot.IsEmpty() && slot.item.data == itemToCheck.data && !slot.IsFull() && slot.item.runtime == null) // Only stack simple items
+                {
+                    int canAdd = Mathf.Max(1, slot.item.data.maxStack) - slot.quantity;
+                    remainingToAdd -= canAdd;
+                    if (remainingToAdd <= 0) return true; // Enough space found in existing stacks
                 }
-                if (spaceAvailable >= quantity) return true;
             }
-            return false;
         }
-    }
-    public bool RequestConsumeItem(ItemData itemData, int amount = 1) { /* ... (no changes needed) ... */
+
+        // Check empty slots
+        foreach (var slot in Container.Slots) {
+            if (slot.IsEmpty()) {
+                int canAdd = itemToCheck.IsStackable ? Mathf.Max(1, itemToCheck.data.maxStack) : 1;
+                remainingToAdd -= canAdd;
+                if (remainingToAdd <= 0) return true; // Enough space found in empty slots
+            }
+        }
+
+        return false; // Not enough space
+     }
+
+     public bool RequestConsumeItem(ItemData itemData, int amount = 1) {
         return Container?.TryConsumeItem(itemData, amount) ?? false;
      }
-     public bool HasItemInInventory(ItemData itemData, int amount = 1) { /* ... (no changes needed) ... */
+     public bool HasItemInInventory(ItemData itemData, int amount = 1) {
         return Container?.HasItem(itemData, amount) ?? false;
      }
 
-    // --- NEW METHOD ---
+    // --- MODIFIED METHOD ---
     /// <summary>
-    /// Attempts to remove one item from the specified inventory slot (typically a toolbar slot).
-    /// Handles stack splitting correctly.
+    /// Attempts to remove one item from the specified inventory slot.
+    /// Handles stack splitting and updates the equipped cache if the selected slot changes.
     /// </summary>
-    /// <param name="slotIndex">The index of the slot to pull from.</param>
-    /// <param name="pulledItem">Output: The InventoryItem instance that was removed.</param>
-    /// <returns>True if an item was successfully pulled, false otherwise.</returns>
     public bool TryPullItemFromSlot(int slotIndex, out InventoryItem pulledItem) {
         pulledItem = null;
-        if (Container == null || toolbarSelector == null) return false;
-        if (slotIndex < 0 || slotIndex >= Container.Size) return false; // Invalid index
+        if (Container == null) return false;
+        if (slotIndex < 0 || slotIndex >= Container.Size) return false;
 
         InventorySlot sourceSlot = Container[slotIndex];
         if (sourceSlot == null || sourceSlot.IsEmpty()) {
             return false; // Nothing to pull
         }
 
-        // --- Logic to extract one item ---
+        bool success = false;
         if (sourceSlot.quantity > 1 && sourceSlot.item.IsStackable) {
-            // Create a new InventoryItem instance for the single item being pulled
-            // For simple stackables, just copy ItemData. If stackables could have
-            // complex runtime state, you'd need a way to copy that state here.
-            pulledItem = new InventoryItem(sourceSlot.item.data);
-            // TODO: If stackable items can have runtime state, implement state copying logic here.
-            sourceSlot.ReduceQuantity(1); // Decrease quantity in the original slot
-            this.OnSlotChanged?.Invoke(slotIndex); // Notify UI quantity changed
-            OnItemPulledFromInventory?.Invoke(pulledItem); // Notify external systems
-            return true;
+            // --- Stack Splitting ---
+            // Create a NEW InventoryItem instance for the single item being pulled.
+             pulledItem = new InventoryItem(sourceSlot.item.data); // Simple copy for basic stackables
+             // TODO: If stackable items *can* have runtime state, implement state cloning here.
+             sourceSlot.ReduceQuantity(1); // Decrease quantity in the original slot
+             success = true;
         } else if (sourceSlot.quantity == 1) {
-            // Take the only item reference from the slot
-            pulledItem = sourceSlot.item;
+            // --- Taking the Last Item ---
+            pulledItem = sourceSlot.item; // Take the reference
             sourceSlot.Clear(); // Clear the source slot entirely
-            this.OnSlotChanged?.Invoke(slotIndex); // Notify UI slot changed
-            OnItemPulledFromInventory?.Invoke(pulledItem); // Notify external systems
-            return true;
+            success = true;
         } else {
-            // Should not happen if IsEmpty() check passed
             Debug.LogError($"[PlayerInventory] PullItem: Slot {slotIndex} quantity logic error. Qty: {sourceSlot.quantity}");
-            return false;
+            success = false;
         }
-    }
-    // --- END NEW METHOD ---
 
+        if (success) {
+            // Notify listeners about the change *after* modifying the slot
+            OnSlotChanged?.Invoke(slotIndex);
+            OnItemPulledFromInventory?.Invoke(pulledItem);
+
+            // *** CRITICAL: Immediately update equipped cache if this was the selected slot ***
+            if (toolbarSelector != null && slotIndex == toolbarSelector.CurrentIndex) {
+                RefreshEquippedItem(); // Force cache refresh NOW
+            }
+            return true;
+        }
+        return false;
+    }
+    // --- END MODIFIED METHOD ---
+
+    // --- IInventoryViewDataSource Implementation ---
     public int SlotCount => Container?.Size ?? 0;
     public InventorySlot GetSlotByIndex(int index) => GetSlotAt(index);
-    public void RequestMergeOrSwap(int fromIndex, int toIndex) { /* ... (no changes needed) ... */
+    public void RequestMergeOrSwap(int fromIndex, int toIndex) {
         Container?.MergeOrSwap(fromIndex, toIndex);
+        // Update cache if merge/swap affects selected slot
+        int selectedIdx = GetSelectedToolbarIndex();
+        if(fromIndex == selectedIdx || toIndex == selectedIdx) {
+            RefreshEquippedItem();
+        }
     }
+    // --- End IInventoryViewDataSource ---
 
-    private InventoryItem _equippedCache;
-
-    private void Awake() { /* ... (no changes needed from previous fixed version) ... */
+    // --- Initialization and Event Handling ---
+    private void Awake() {
         inventoryComp = GetComponent<InventoryComponent>();
         if (inventoryComp == null) {
-             Debug.LogError($"[PlayerInventory AWAKE on {gameObject.name}] CRITICAL: inventoryComp is NULL after GetComponent! PlayerInventory cannot function. CHECK INSPECTOR ASSIGNMENT.", this);
+             Debug.LogError($"[PlayerInventory AWAKE on {gameObject.name}] CRITICAL: InventoryComponent is NULL! PlayerInventory cannot function.", this);
              this.enabled = false;
              return;
         }
+        // Container should be initialized by InventoryComponent's Awake
         toolbarSelector ??= GetComponentInChildren<ToolbarSelector>(true);
         if (toolbarSelector == null) Debug.LogError($"[PlayerInventory on {gameObject.name}] ToolbarSelector missing!", this);
     }
-    private void Start() { /* ... (no changes needed from previous fixed version) ... */
+    private void Start() {
          if (Container == null) {
              Debug.LogError($"[PlayerInventory START on {gameObject.name}] Container IS NULL. Check InventoryComponent's Awake/Initialization.", this);
+         } else {
+             // Subscribe after container confirmed non-null
+            SubscribeToEvents();
+            InitializeEquipmentState(); // Initial equip based on starting selection
          }
-        SubscribeToEvents();
-        InitializeEquipmentState();
     }
-    private void OnEnable() { /* ... (no changes needed from previous fixed version) ... */
+    private void OnEnable() {
+        // Re-subscribe and initialize state if re-enabled after Start
         if (inventoryComp?.Container != null) {
             SubscribeToEvents();
             InitializeEquipmentState();
         }
     }
     private void OnDisable() { UnsubscribeFromEvents(); }
-    private void SubscribeToEvents() { /* ... (no changes needed) ... */
-        UnsubscribeFromEvents();
+
+    private void SubscribeToEvents() {
+        UnsubscribeFromEvents(); // Prevent double subscription
         if (toolbarSelector != null) toolbarSelector.OnIndexChanged += HandleToolbarIndexChanged;
         if (inventoryComp?.Container != null) inventoryComp.Container.OnSlotChanged += HandleInternalContainerSlotChanged;
+        else Debug.LogWarning("[PlayerInventory] Cannot subscribe to Container events - Container is null.");
     }
-    private void UnsubscribeFromEvents() { /* ... (no changes needed) ... */
+    private void UnsubscribeFromEvents() {
         if (toolbarSelector != null) toolbarSelector.OnIndexChanged -= HandleToolbarIndexChanged;
+        // Check container exists before unsubscribing
         if (inventoryComp?.Container != null) inventoryComp.Container.OnSlotChanged -= HandleInternalContainerSlotChanged;
     }
-    private void HandleInternalContainerSlotChanged(int index) { /* ... (no changes needed) ... */
+
+    private void HandleInternalContainerSlotChanged(int index) {
+        // Forward the event for the UI
         this.OnSlotChanged?.Invoke(index);
+        // Check if the change affects the equipped item
         HandleContainerSlotChangedForEquip(index);
     }
+
     private void HandleToolbarIndexChanged(int newIndex) { RefreshEquippedItem(); }
-    private void HandleContainerSlotChangedForEquip(int index) { /* ... (no changes needed) ... */
-         if (index < 0) { RefreshEquippedItem(); return; }
-        if (toolbarSelector != null && index < toolbarSelector.SlotCount && index == toolbarSelector.CurrentIndex) { RefreshEquippedItem(); }
+
+    private void HandleContainerSlotChangedForEquip(int index) {
+        // If index is -1 (structural change) or the changed slot is the currently selected toolbar slot, refresh equipped item
+        if (index < 0) {
+             RefreshEquippedItem();
+             return;
+        }
+        if (toolbarSelector != null && index < toolbarSelector.SlotCount && index == toolbarSelector.CurrentIndex) {
+            RefreshEquippedItem();
+        }
     }
+
     public void HandleToolbarScroll(float scrollDirection) => toolbarSelector?.Step((int)Mathf.Sign(scrollDirection));
     public void HandleToolbarSlotSelection(int slotIndex) => toolbarSelector?.SetIndex(slotIndex);
-    private void InitializeEquipmentState() { /* ... (no changes needed) ... */
-        if (toolbarSelector != null && Container != null) { HandleToolbarIndexChanged(toolbarSelector.CurrentIndex); } else { RefreshEquippedItem(); }
-    }
-    private void RefreshEquippedItem() { /* ... (no changes needed) ... */
-        InventoryItem newItemInSlot = null;
+
+    private void InitializeEquipmentState() {
+        // Trigger initial check based on toolbar's starting index
         if (toolbarSelector != null && Container != null) {
-            int idx = toolbarSelector.CurrentIndex;
-            if (idx >= 0 && idx < Container.Size) {
-                InventorySlot slot = GetSlotAt(idx);
-                newItemInSlot = slot?.item;
-            } else if (Container.Size > 0 && idx >= Container.Size) {
-                 Debug.LogWarning($"[PlayerInventory] Toolbar index {idx} is out of bounds for container size {Container.Size}. Resetting equipped cache.");
-            }
-        }
-        if (newItemInSlot != _equippedCache) {
-            _equippedCache = newItemInSlot;
-            OnEquippedItemChanged?.Invoke(_equippedCache);
+             HandleToolbarIndexChanged(toolbarSelector.CurrentIndex);
+        } else {
+            RefreshEquippedItem(); // Fallback if toolbar/container not ready
         }
     }
-    public InventorySlot GetSlotAt(int i) { /* ... (no changes needed) ... */
+
+    // --- MODIFIED METHOD ---
+    /// <summary>
+    /// Updates the _equippedCache based on the item currently in the selected toolbar slot.
+    /// Explicitly reads the slot content NOW.
+    /// </summary>
+    private void RefreshEquippedItem() {
+        InventoryItem newItemInSlot = null;
+        int selectedIdx = GetSelectedToolbarIndex();
+
+        if (selectedIdx >= 0 && Container != null && selectedIdx < Container.Size) {
+            InventorySlot slot = GetSlotAt(selectedIdx); // Get the current state of the slot
+            if (slot != null && !slot.IsEmpty()) {
+                newItemInSlot = slot.item; // Get the item reference directly from the slot
+            }
+            // If slot is null or empty, newItemInSlot remains null
+        }
+        // else: No valid selection or container, newItemInSlot remains null
+
+        // Update cache and fire event ONLY if the item reference has actually changed
+        if (newItemInSlot != _equippedCache) {
+            _equippedCache = newItemInSlot; // Update the cache
+            // Debug.Log($"[PlayerInventory] Equipped Cache Updated. Now: {(_equippedCache?.data?.itemName ?? "NULL")}");
+            OnEquippedItemChanged?.Invoke(_equippedCache); // Notify EquipmentController
+        }
+    }
+    // --- END MODIFIED METHOD ---
+
+    public InventorySlot GetSlotAt(int i) {
          if (Container != null && i >= 0 && i < Container.Size) return Container[i]; return null;
     }
     public int GetSelectedToolbarIndex() => toolbarSelector?.CurrentIndex ?? -1;
+
 }
