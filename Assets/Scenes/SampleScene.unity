@@ -1357,23 +1357,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9ad95eb34846b6e40aae8bfe7e822637, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  interactionReach: 3
-  mountPointLayerMask:
-    serializedVersion: 2
-    m_Bits: 512
-  grabbableLayerMask:
+  interactionReach: 5
+  grabbableMask:
     serializedVersion: 2
     m_Bits: 256
-  grabTargetCollisionLayers:
+  mountMask:
+    serializedVersion: 2
+    m_Bits: 512
+  holdDefault: 1.6
+  holdMin: 0.4
+  holdMax: 3.5
+  scrollSpeed: 0.3
+  smoothFollow: 1
+  smoothSpeed: 15
+  worldMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  itemFollowSpeed: 20
-  itemManualRotationSpeed: 200
-  itemHoldDistanceDefault: 1.5
-  itemHoldDistanceMin: 0.75
-  itemHoldDistanceMax: 4
-  itemScrollSpeed: 0.3
-  collisionPullbackOffset: 0.1
+  sweepSkin: 0.02
+  teleportDistance: 1
+  rotationDegPerPx: 110
 --- !u!1 &275117421
 GameObject:
   m_ObjectHideFlags: 0
@@ -4316,6 +4318,75 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 1307939608157171483, guid: f1d71ba834ebd554c840faf233bbb867, type: 3}
   m_PrefabInstance: {fileID: 6939328730447258159}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &858109594
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 858109596}
+  - component: {fileID: 858109595}
+  m_Layer: 0
+  m_Name: Rifle ItemSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 7174288486110832750, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &858109595
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 858109594}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7da7fae6322deda42a3c95aaa3203fb9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  itemToSpawn: {fileID: 11400000, guid: 707f30ec5fe3a6f4294283a3542aa835, type: 2}
+  destroySpawnerAfterSpawn: 1
+  spawnPositionOffset: {x: 0, y: 0, z: 0}
+  spawnRotationOffset: {x: 0, y: 0, z: 0}
+  initialStateTemplate:
+    magazine:
+      _slots:
+      - item:
+          data: {fileID: 11400000, guid: 4a3bc48d7ee1c4a45b7188ba10bf2646, type: 2}
+          runtime:
+            rid: -2
+        quantity: 10
+    attachments:
+      _slots:
+      - item:
+          data: {fileID: 11400000, guid: 8230578794d44e84abb7ea80c67d1e7c, type: 2}
+          runtime:
+            rid: -2
+        quantity: 1
+    durability: 100
+  references:
+    version: 2
+    RefIds:
+    - rid: -2
+      type: {class: , ns: , asm: }
+--- !u!4 &858109596
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 858109594}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -39.99, y: -7.817, z: -13.95}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &861380765
 GameObject:
   m_ObjectHideFlags: 0
@@ -5439,7 +5510,7 @@ GameObject:
   m_Layer: 0
   m_Name: Engine ItemSpawner
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 7174288486110832750, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -11132,7 +11203,7 @@ GameObject:
   m_Layer: 0
   m_Name: Gearbox ItemSpawner
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 7174288486110832750, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -11415,7 +11486,7 @@ GameObject:
   m_Layer: 0
   m_Name: Pistol ItemSpawner
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 7174288486110832750, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -17821,3 +17892,4 @@ SceneRoots:
   - {fileID: 1033401086}
   - {fileID: 1951655134}
   - {fileID: 2050124771}
+  - {fileID: 858109596}

@@ -18,4 +18,7 @@ public interface IItemInputReceiver
 
     // Reload (R)
     void OnReloadDown();
+
+    // Store (T) - NEW METHOD
+    void OnStoreDown(); 
 }

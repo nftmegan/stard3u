@@ -1,3 +1,4 @@
+// --- Assets/Logic/Vehicles/Core/ItemInstance.cs ----------------------
 using UnityEngine;
 
 /// <summary>
@@ -17,15 +18,27 @@ public abstract class ItemInstance : MonoBehaviour, IGrabbable {
     protected Collider[] _colliders;
     protected bool _originalRigidbodyKinematicState;
     protected bool _originalRigidbodyGravityState;
+    // Cache other original physics properties if needed (e.g., drag, angularDrag, constraints)
+    // protected float _originalDrag;
+    // protected float _originalAngularDrag;
     protected int _originalLayer;
+
 
     /// <summary>
     /// Base Awake: Finds components, caches physics state.
     /// </summary>
     protected virtual void Awake() {
-        _rigidbody = GetComponent<Rigidbody>(); // Can be null
-        if (_rigidbody != null) { _originalRigidbodyKinematicState = _rigidbody.isKinematic; _originalRigidbodyGravityState = _rigidbody.useGravity; }
-        else { _originalRigidbodyKinematicState = true; _originalRigidbodyGravityState = false; } // Sensible defaults if no RB
+        _rigidbody = GetComponent<Rigidbody>(); 
+        if (_rigidbody != null) {
+            _originalRigidbodyKinematicState = _rigidbody.isKinematic;
+            _originalRigidbodyGravityState = _rigidbody.useGravity;
+            // _originalDrag = _rigidbody.drag;
+            // _originalAngularDrag = _rigidbody.angularDrag;
+        }
+        else { // Sensible defaults if no RB, though IGrabbable usually implies a physics object
+            _originalRigidbodyKinematicState = true; 
+            _originalRigidbodyGravityState = false;
+        }
         _colliders = GetComponentsInChildren<Collider>(true);
         _originalLayer = gameObject.layer;
     }
@@ -41,7 +54,10 @@ public abstract class ItemInstance : MonoBehaviour, IGrabbable {
         }
         this.itemInstanceData = itemDataToAssign;
         gameObject.name = $"ItemInst_{itemInstanceData.data?.itemName ?? GetType().Name}";
-        UpdatePhysicsForDrop(); // Set initial physics for a non-held item
+        
+        // If this item is instantiated directly into the world (not via player grabbing then dropping),
+        // ensure its physics state is correctly set based on its original prefab settings.
+        UpdatePhysicsForInitialSpawn();
         enabled = true;
     }
 
@@ -53,7 +69,6 @@ public abstract class ItemInstance : MonoBehaviour, IGrabbable {
     protected virtual void UpdateInventoryItemRuntimeState() {
         if (this.itemInstanceData == null || this.itemInstanceData.runtime == null) {
             // This is okay if the item type simply has no runtime state.
-            // Error logging here might be too noisy. Log in derived classes if state is *expected* but null.
         }
     }
 
@@ -63,48 +78,82 @@ public abstract class ItemInstance : MonoBehaviour, IGrabbable {
     protected bool ValidateItemInstance_Base(InventoryItem itemInstance, string contextObjectName) {
          if (itemInstance == null) { Debug.LogError($"[{contextObjectName}] Validate FAIL: Null InventoryItem!", this); return false; }
          if (itemInstance.data == null) { Debug.LogError($"[{contextObjectName}] Validate FAIL: ItemData is null!", this); return false; }
-         // Runtime state validation/creation is handled by Spawner or specific Initialize overrides
          return true;
     }
 
-    // Physics helpers remain protected
-    protected void UpdatePhysicsForDrop() { if (_rigidbody != null) { _rigidbody.isKinematic = _originalRigidbodyKinematicState; _rigidbody.useGravity = _originalRigidbodyGravityState; } }
-    protected void UpdatePhysicsForGrab() { if (_rigidbody != null) { _originalRigidbodyKinematicState = _rigidbody.isKinematic; _originalRigidbodyGravityState = _rigidbody.useGravity; _rigidbody.isKinematic = true; _rigidbody.useGravity = false; } }
+    /// <summary>
+    /// Sets the Rigidbody state when the item is initially spawned into the world
+    /// (e.g., by an ItemSpawner, not when dropped by player after grabbing).
+    /// </summary>
+    protected void UpdatePhysicsForInitialSpawn() {
+        if (_rigidbody != null) {
+            _rigidbody.isKinematic = _originalRigidbodyKinematicState;
+            _rigidbody.useGravity = _originalRigidbodyGravityState;
+            // _rigidbody.drag = _originalDrag;
+            // _rigidbody.angularDrag = _originalAngularDrag;
+        }
+    }
+
+    /// <summary>
+    /// Sets the Rigidbody state when the item is grabbed by the player.
+    /// It's important that the _original... states are cached *before* this is called if not already done in Awake.
+    /// </summary>
+    protected void UpdatePhysicsForGrab() {
+        if (_rigidbody != null) {
+            // Cache current state if not already done (e.g. if Awake didn't run or was overridden)
+            // This is a safety net, Awake should handle the primary caching.
+            if(!Application.isPlaying || Time.frameCount < 2) // rough check if awake might not have set them yet
+            {
+                 _originalRigidbodyKinematicState = _rigidbody.isKinematic;
+                 _originalRigidbodyGravityState = _rigidbody.useGravity;
+            }
+
+            _rigidbody.isKinematic = true;
+            _rigidbody.useGravity = false;
+            // Optionally, you might want to set drag/angularDrag to 0 while held
+            // _rigidbody.drag = 0f;
+            // _rigidbody.angularDrag = 0.05f; // Small angular drag can help stabilize
+        }
+    }
+
 
     // --- Getters ---
     public T GetItemData<T>() where T : ItemData => ItemInstanceData?.data as T;
     public T GetRuntimeState<T>() where T : class, IRuntimeState => ItemInstanceData?.runtime as T;
 
     #region IGrabbable Implementation (public virtual methods)
-    // These provide default grabbing behavior for all ItemInstances
 
     public virtual InventoryItem GetInventoryItemData() {
         if (ItemInstanceData == null) { Debug.LogError($"[{gameObject.name}] GetInventoryItemData: ItemInstanceData is NULL!", this); return null; }
-        UpdateInventoryItemRuntimeState(); // Ensure state is synced if derived class overrides
+        UpdateInventoryItemRuntimeState(); 
         return this.ItemInstanceData;
     }
 
     public virtual Transform GetTransform() { return this.transform; }
 
-    // Base CanGrab allows grabbing if enabled and initialized. PartInstance overrides this.
     public virtual bool CanGrab() { return this.enabled && ItemInstanceData != null; }
 
     public virtual void OnGrabbed(Transform grabberTransform) {
-        UpdateInventoryItemRuntimeState(); // Sync state first
-        UpdatePhysicsForGrab(); // Make kinematic etc.
-        // Consider moving layer change logic here if ALL grabbables should change layer
-        // gameObject.layer = LayerMask.NameToLayer("GrabbedObject");
+        UpdateInventoryItemRuntimeState(); 
+        UpdatePhysicsForGrab(); 
     }
 
+    /// <summary>
+    /// Called by PlayerGrabController when the item is dropped.
+    /// PlayerGrabController is responsible for making the Rigidbody dynamic and applying initial velocities.
+    /// This method should handle unparenting and any item-specific logic on being dropped.
+    /// </summary>
     public virtual void OnDropped(Vector3 dropVelocity) {
         transform.SetParent(null);
-        UpdatePhysicsForDrop(); // Restore physics
-        if (_rigidbody != null) {
-            _rigidbody.linearVelocity = dropVelocity;
-            _rigidbody.angularVelocity = Random.insideUnitSphere * 2f;
-        }
-        // Restore original layer if needed
-        // gameObject.layer = _originalLayer;
+        // DO NOT call UpdatePhysicsForInitialSpawn() or UpdatePhysicsForDrop() here if PGC manages the drop physics state.
+        // The Rigidbody's kinematic and gravity state should have already been set by PlayerGrabController.
+        // If you need to restore other specific Rigidbody properties (like constraints, drag, if modified by OnGrabbed),
+        // do that here selectively, ensuring not to override isKinematic or useGravity.
+        // For example:
+        // if (_rigidbody != null) {
+        //     _rigidbody.drag = _originalDrag;
+        //     _rigidbody.angularDrag = _originalAngularDrag;
+        // }
     }
 
     public virtual void OnStored() { /* Called just before Destroy after storing */ }

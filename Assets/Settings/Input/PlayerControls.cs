@@ -315,15 +315,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
-                },
-                {
-                    ""name"": ""RotateHeldDelta"",
-                    ""type"": ""Value"",
-                    ""id"": ""91e1a1d4-cfd9-4f03-b387-06996d0aa07f"",
-                    ""expectedControlType"": ""Vector2"",
-                    ""processors"": """",
-                    ""interactions"": """",
-                    ""initialStateCheck"": true
                 }
             ],
             ""bindings"": [
@@ -755,17 +746,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""action"": ""RotateHeld"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""7e3a05bd-3f2f-48df-be07-64ce4f29314a"",
-                    ""path"": ""<Mouse>/delta"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": """",
-                    ""action"": ""RotateHeldDelta"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
                 }
             ]
         },
@@ -1055,7 +1035,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         m_Gameplay_ToggleMenu = m_Gameplay.FindAction("ToggleMenu", throwIfNotFound: true);
         m_Gameplay_Store = m_Gameplay.FindAction("Store", throwIfNotFound: true);
         m_Gameplay_RotateHeld = m_Gameplay.FindAction("RotateHeld", throwIfNotFound: true);
-        m_Gameplay_RotateHeldDelta = m_Gameplay.FindAction("RotateHeldDelta", throwIfNotFound: true);
         // UI
         m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
         m_UI_Navigate = m_UI.FindAction("Navigate", throwIfNotFound: true);
@@ -1172,7 +1151,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     private readonly InputAction m_Gameplay_ToggleMenu;
     private readonly InputAction m_Gameplay_Store;
     private readonly InputAction m_Gameplay_RotateHeld;
-    private readonly InputAction m_Gameplay_RotateHeldDelta;
     /// <summary>
     /// Provides access to input actions defined in input action map "Gameplay".
     /// </summary>
@@ -1285,10 +1263,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// </summary>
         public InputAction @RotateHeld => m_Wrapper.m_Gameplay_RotateHeld;
         /// <summary>
-        /// Provides access to the underlying input action "Gameplay/RotateHeldDelta".
-        /// </summary>
-        public InputAction @RotateHeldDelta => m_Wrapper.m_Gameplay_RotateHeldDelta;
-        /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
         public InputActionMap Get() { return m_Wrapper.m_Gameplay; }
@@ -1389,9 +1363,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @RotateHeld.started += instance.OnRotateHeld;
             @RotateHeld.performed += instance.OnRotateHeld;
             @RotateHeld.canceled += instance.OnRotateHeld;
-            @RotateHeldDelta.started += instance.OnRotateHeldDelta;
-            @RotateHeldDelta.performed += instance.OnRotateHeldDelta;
-            @RotateHeldDelta.canceled += instance.OnRotateHeldDelta;
         }
 
         /// <summary>
@@ -1478,9 +1449,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @RotateHeld.started -= instance.OnRotateHeld;
             @RotateHeld.performed -= instance.OnRotateHeld;
             @RotateHeld.canceled -= instance.OnRotateHeld;
-            @RotateHeldDelta.started -= instance.OnRotateHeldDelta;
-            @RotateHeldDelta.performed -= instance.OnRotateHeldDelta;
-            @RotateHeldDelta.canceled -= instance.OnRotateHeldDelta;
         }
 
         /// <summary>
@@ -1869,13 +1837,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnRotateHeld(InputAction.CallbackContext context);
-        /// <summary>
-        /// Method invoked when associated input action "RotateHeldDelta" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
-        /// </summary>
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnRotateHeldDelta(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.

@@ -1,28 +1,50 @@
+// --- Assets/Logic/Items/Core/EquipabbleBehavior.cs ---
 using UnityEngine;
 
 public abstract class EquippableBehavior : MonoBehaviour, IItemInputReceiver, IEquippableInstance {
     protected InventoryItem runtimeItem { get; private set; }
     public InventoryItem RuntimeItemInstance => runtimeItem;
 
-    // Contexts directly available to all behaviors
     protected IEquipmentHolder ownerEquipmentHolder { get; private set; }
     protected IAimProvider ownerAimProvider { get; private set; }
-    // Removed: protected EquipmentController _equipmentControllerInternal;
+    
+    // Keep PlayerGrabController accessible for derived classes like HandsBehavior
+    protected PlayerGrabController playerGrabController { get; private set; }
 
-    // Simplified Initialize - No need to find EquipmentController here anymore
+
     public virtual void Initialize(InventoryItem itemInstance, IEquipmentHolder holder, IAimProvider aimProvider) {
         this.runtimeItem = itemInstance;
         this.ownerEquipmentHolder = holder;
         this.ownerAimProvider = aimProvider;
 
+        // Find PlayerGrabController - it's a common need for interaction
+        if (holder is Component componentHolder)
+        {
+            PlayerManager pm = componentHolder.GetComponentInParent<PlayerManager>();
+            if (pm != null)
+            {
+                this.playerGrabController = pm.GrabController;
+            }
+        }
+        if (this.playerGrabController == null)
+        {
+            // Fallback if PlayerManager context isn't directly available via holder
+            this.playerGrabController = FindFirstObjectByType<PlayerGrabController>();
+        }
+        if (this.playerGrabController == null && !(this is HandsBehavior)) // HandsBehavior specifically needs it
+        {
+            // Only log error if a non-Hands behavior couldn't find it, as HandsBehavior will log its own critical error.
+            // Debug.LogWarning($"[{GetType().Name} on {gameObject.name}] PlayerGrabController not found. Some interactions might be limited.", this);
+        }
+
+
         bool isConsideredFallback = (this is HandsBehavior) || itemInstance == null || itemInstance.data == null;
 
-        // Validate essential contexts
         if (this.ownerEquipmentHolder == null && !isConsideredFallback) {
             Debug.LogError($"[{GetType().Name} on {gameObject.name}] Initialize ERROR: Null IEquipmentHolder for non-fallback item '{itemInstance?.data?.itemName}'!", this);
             this.enabled = false; return;
         }
-        if (this.ownerAimProvider == null) { // Aim provider is generally always needed
+        if (this.ownerAimProvider == null) { 
             Debug.LogError($"[{GetType().Name} on {gameObject.name}] Initialize ERROR: Null IAimProvider!", this);
             this.enabled = false; return;
         }
@@ -39,11 +61,29 @@ public abstract class EquippableBehavior : MonoBehaviour, IItemInputReceiver, IE
     public virtual void OnUtilityUp() { }
     public virtual void OnReloadDown() { }
 
-    // Base OnStoreDown does nothing by default now.
-    // HandsBehavior MUST override this for its store/pull logic.
-    // Other behaviors could override if they have a specific 'Store' action.
-    public virtual void OnStoreDown() { }
-    // --- Lifecycle ---
+    /// <summary>
+    /// Base implementation for the Store action.
+    /// Most equippables (like weapons) might only allow pulling from inventory if not grabbing.
+    /// HandsBehavior will override this for full grab/store/pull functionality.
+    /// </summary>
+    public virtual void OnStoreDown()
+    {
+        if (playerGrabController == null) return;
+
+        if (playerGrabController.IsGrabbing)
+        {
+            // If any equippable is active AND player is somehow also grabbing via PGC (unusual state),
+            // default to trying to store what PGC is holding.
+            playerGrabController.HandleStoreAction(); // PGC's HandleStoreAction will try to store.
+        }
+        else
+        {
+            // Default behavior for non-Hands equippables:
+            // Allow pulling an item from inventory into the grab slot.
+            playerGrabController.HandleStoreAction(); // PGC's HandleStoreAction will try to pull.
+        }
+    }
+
     protected virtual void OnEnable() { }
     protected virtual void OnDisable() { }
 }

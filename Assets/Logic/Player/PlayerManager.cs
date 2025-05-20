@@ -19,7 +19,6 @@ public class PlayerManager : MonoBehaviour
     [SerializeField] private UIStateController uiStateController;
     [SerializeField] private UIPanelRegistry uiPanelRegistry;
 
-    // Public accessors
     public PlayerLook Look => playerLook;
     public MyCharacterController CharacterController => characterController;
     public EquipmentController Equipment => equipmentController;
@@ -28,7 +27,7 @@ public class PlayerManager : MonoBehaviour
     public PlayerInputHandler InputHandler => inputHandler;
     public PlayerGrabController GrabController => grabController;
 
-    private bool isRotatingGrabbedItem = false; // State to track if player is actively rotating a grabbed item
+    private bool isRotatingGrabbedItem = false; // True if MMB is held AND an item is grabbed
 
     private void Awake()
     {
@@ -43,49 +42,39 @@ public class PlayerManager : MonoBehaviour
         inventoryUIManager ??= FindFirstObjectByType<InventoryUIManager>();
         uiPanelRegistry ??= FindFirstObjectByType<UIPanelRegistry>();
 
-        // --- Validation --- //
         if (inputHandler == null) Debug.LogError("[PM] Input Handler Missing", this);
         if (playerInventory == null) Debug.LogError("[PM] PlayerInventory Missing", this);
         if (playerLook == null) Debug.LogError("[PM] PlayerLook Missing", this);
         if (characterController == null) Debug.LogError("[PM] CharacterController Missing", this);
         if (equipmentController == null) Debug.LogError("[PM] EquipmentController Missing", this);
         if (worldInteractor == null) Debug.LogError("[PM] WorldInteractor Missing", this);
-        if (grabController == null) Debug.LogError("[PM] Grab Controller Missing", this);
+        if (grabController == null) Debug.LogError("[PM] Grab Controller Missing.", this);
         if (uiStateController == null) Debug.LogError("[PM] UIStateController Missing", this);
-
-
-        if (uiPanelRegistry == null) Debug.LogWarning("[PM] UIPanelRegistry missing in scene.", this);
-        if (inventoryUIManager == null) Debug.LogWarning("[PM] InventoryUIManager missing in scene.", this);
-
+        
         if (uiStateController != null) uiStateController.OnStateChanged += HandleUIStateChange;
-        else Debug.LogWarning("[PM] UIStateController null in Awake, cannot subscribe to state changes.", this);
-
         if (grabController != null)
         {
             grabController.InitializeController(this);
             grabController.OnGrabStateChanged += HandleGrabStateChanged;
-        } else Debug.LogError("[PM] Grab Controller Null! Grab functionality will be broken.", this);
+        }
     }
 
     private void Start()
     {
         if (uiPanelRegistry != null && uiStateController != null) uiPanelRegistry.Hook(uiStateController);
-        else if (uiStateController == null) { if (inputHandler != null) inputHandler.EnableGameplayControls(); Debug.LogWarning("[PM START] UIStateController missing."); }
-        else { HandleUIStateChange(new UIStateChanged(uiStateController.Current, uiStateController.Current)); Debug.LogWarning("[PM START] UIPanelRegistry missing."); }
+        else if (uiStateController == null && inputHandler != null) inputHandler.EnableGameplayControls();
+        else if (uiStateController != null) HandleUIStateChange(new UIStateChanged(uiStateController.Current, uiStateController.Current));
 
         if (inventoryUIManager != null && playerInventory != null) inventoryUIManager.Show(playerInventory);
-        else Debug.LogWarning("[PM START] InventoryUIManager or PlayerInventory missing.");
-
         equipmentController?.ManualStart();
     }
 
     private void OnEnable()
     {
-        if (inputHandler == null) { Debug.LogError("[PM] Input Handler Null on Enable. Cannot subscribe events.", this); return; }
+        if (inputHandler == null) { Debug.LogError("[PM] Input Handler Null on Enable.", this); return; }
 
-        // Gameplay Actions Subscriptions
         inputHandler.MovePerformed += HandleMoveInput;
-        inputHandler.LookPerformed += HandleLookInput;
+        inputHandler.LookPerformed += HandleLookInput; // This event provides the delta
         inputHandler.JumpPerformed += HandleJumpInput;
         inputHandler.SprintStarted += HandleSprintStart; inputHandler.SprintCanceled += HandleSprintCancel;
         inputHandler.CrouchStarted += HandleCrouchStart; inputHandler.CrouchCanceled += HandleCrouchCancel;
@@ -99,12 +88,11 @@ public class PlayerManager : MonoBehaviour
         inputHandler.StorePerformed += HandleStore;
         inputHandler.UtilityPerformed += HandleUtilityStart; inputHandler.UtilityCanceled += HandleUtilityCancel;
         inputHandler.ToggleInventoryPerformed += HandleToggleInventory; inputHandler.ToggleMenuPerformed += HandleToggleMenu;
-        // Rotation Events
-        inputHandler.RotateHeldStarted += HandleRotateHeldStarted;
-        inputHandler.RotateHeldEnded += HandleRotateHeldEnded;
-        inputHandler.RotateDeltaPerformed += HandleRotateDeltaPerformed;
-
-        // UI Actions Subscriptions
+        
+        inputHandler.RotateHeldStarted += HandleRotateHeldStartedEvent; // Renamed to avoid conflict
+        inputHandler.RotateHeldEnded += HandleRotateHeldEndedEvent;     // Renamed to avoid conflict
+        inputHandler.RotateDeltaPerformed += HandleRotateDeltaInput;    // This receives delta from LookPerformed when MMB is held
+        
         inputHandler.UICancelPerformed += HandleUICancel;
         inputHandler.UITabNavigatePerformed += HandleUITabNavigate;
     }
@@ -127,9 +115,11 @@ public class PlayerManager : MonoBehaviour
              inputHandler.StorePerformed -= HandleStore;
              inputHandler.UtilityPerformed -= HandleUtilityStart; inputHandler.UtilityCanceled -= HandleUtilityCancel;
              inputHandler.ToggleInventoryPerformed -= HandleToggleInventory; inputHandler.ToggleMenuPerformed -= HandleToggleMenu;
-             inputHandler.RotateHeldStarted -= HandleRotateHeldStarted;
-             inputHandler.RotateHeldEnded -= HandleRotateHeldEnded;
-             inputHandler.RotateDeltaPerformed -= HandleRotateDeltaPerformed;
+
+             inputHandler.RotateHeldStarted -= HandleRotateHeldStartedEvent;
+             inputHandler.RotateHeldEnded -= HandleRotateHeldEndedEvent;
+             inputHandler.RotateDeltaPerformed -= HandleRotateDeltaInput;
+
              inputHandler.UICancelPerformed -= HandleUICancel;
              inputHandler.UITabNavigatePerformed -= HandleUITabNavigate;
         }
@@ -141,8 +131,6 @@ public class PlayerManager : MonoBehaviour
         if (characterController != null && playerLook != null) {
             characterController.SetLookDirection(playerLook.GetLookDirection());
         }
-
-        // Forward hold actions only if not grabbing AND not actively rotating a grabbed item
         if (inputHandler != null && equipmentController != null && !isRotatingGrabbedItem && (grabController == null || !grabController.IsGrabbing)) {
             if (inputHandler.IsFire1Held) equipmentController.HandleFire1Hold();
             if (inputHandler.IsFire2Held) equipmentController.HandleFire2Hold();
@@ -156,25 +144,49 @@ public class PlayerManager : MonoBehaviour
          }
     }
 
-    // --- Event Handlers ---
     private void HandleUIStateChange(UIStateChanged eventArgs) {
         if (inputHandler == null) return;
         if (eventArgs.Current == UIState.Gameplay) inputHandler.EnableGameplayControls();
         else inputHandler.EnableUIControls();
+        if (eventArgs.Current != UIState.Gameplay && isRotatingGrabbedItem) {
+            isRotatingGrabbedItem = false;
+            grabController?.EndGrabRotation();
+        }
      }
     private void HandleGrabStateChanged(bool isGrabbing, IGrabbable grabbedItem) {
-        if (isGrabbing) equipmentController?.HandleEquipRequest(null); // Force equip Hands
-        else equipmentController?.HandleEquipRequest(playerInventory?.GetCurrentEquippedItem()); // Re-evaluate
+        if (isGrabbing) {
+            equipmentController?.HandleEquipRequest(null); 
+        } else {
+            equipmentController?.HandleEquipRequest(playerInventory?.GetCurrentEquippedItem()); 
+            if (isRotatingGrabbedItem) {
+                isRotatingGrabbedItem = false; 
+            }
+        }
     }
 
-    // --- Gameplay Action Handlers ---
     private void HandleMoveInput(Vector2 m) => characterController?.SetMoveInput(m);
-    private void HandleLookInput(Vector2 l) {
-        if (!isRotatingGrabbedItem) playerLook?.SetLookInput(l);
-        // RotateDeltaPerformed event now handles forwarding look delta for item rotation
+
+    private void HandleLookInput(Vector2 lookDelta) {
+        // This lookDelta is from InputHandler.LookPerformed
+        // PlayerInputHandler now gates the LookPerformed event based on IsRotateHeld for camera look
+        // but always fires RotateDeltaPerformed if IsRotateHeld is true.
+        // So, here we only pass to PlayerLook if not rotating item.
+        if (!isRotatingGrabbedItem) {
+            playerLook?.SetLookInput(lookDelta);
+        }
     }
+    private void HandleRotateDeltaInput(Vector2 rotateDelta) {
+        // This is called from InputHandler.RotateDeltaPerformed (which is fired by LookPerformed if IsRotateHeld)
+        if (isRotatingGrabbedItem && grabController != null && grabController.IsGrabbing) {
+            grabController.ApplyGrabbedItemRotationInput(rotateDelta);
+        }
+    }
+
     private void HandleJumpInput() => characterController?.OnJumpPressed();
-    private void HandleInteract() => worldInteractor?.OnInteractPressed();
+    private void HandleInteract() {
+        if (isRotatingGrabbedItem) return; 
+        worldInteractor?.OnInteractPressed();
+    }
     private void HandleSprintStart() => characterController?.SetSprint(true);
     private void HandleSprintCancel() => characterController?.SetSprint(false);
     private void HandleCrouchStart() => characterController?.SetCrouch(true);
@@ -182,27 +194,21 @@ public class PlayerManager : MonoBehaviour
     private void HandleSlowWalkStart() => characterController?.SetSlowWalk(true);
     private void HandleSlowWalkCancel() => characterController?.SetSlowWalk(false);
 
-    private void HandleToolbarScroll(float dir)
-    {
-        // If player is actively rotating a grabbed item with middle mouse, scroll should NOT adjust distance.
-        // Scroll should only adjust distance if IsGrabbing is true AND IsRotatingGrabbedItem is false.
-        if (grabController != null && grabController.IsGrabbing && !isRotatingGrabbedItem) // Check !isRotatingGrabbedItem
+    private void HandleToolbarScroll(float dir) {
+        if (isRotatingGrabbedItem) return; 
+        if (grabController != null && grabController.IsGrabbing)
             grabController.AdjustGrabbedItemDistance(dir);
-        else if (!isRotatingGrabbedItem) // Only scroll toolbar if not actively rotating grabbed item
+        else
             playerInventory?.HandleToolbarScroll(dir);
     }
 
-    private void HandleToolbarSlotSelection(int idx) => playerInventory?.HandleToolbarSlotSelection(idx);
+    private void HandleToolbarSlotSelection(int idx) {
+        if (isRotatingGrabbedItem) return; 
+        playerInventory?.HandleToolbarSlotSelection(idx);
+    }
 
     private void HandleFire1Start() {
-    if (grabController != null && grabController.IsGrabbing) {
-            grabController.DropGrabbedItemWithLMB(); // LMB drops if holding
-        } else if (grabController != null) {
-            grabController.TryGrabOrDetachWorldObject(); // LMB grabs if not holding
-        }
-        else {
-            equipmentController?.HandleFire1Down(); // Fallback if no grabController
-        }
+        equipmentController?.HandleFire1Down();
     }
 
     private void HandleFire1Cancel() {
@@ -210,74 +216,77 @@ public class PlayerManager : MonoBehaviour
         if (!isRotatingGrabbedItem && (grabController == null || !grabController.IsGrabbing))
              equipmentController?.HandleFire1Up();
     }
+    
     private void HandleFire2Start() {
-        // If not grabbing, Fire2 (RMB) is for equipment (e.g., ADS)
-        // If grabbing, RMB could do something else, or nothing. For now, let's say it does nothing if grabbing.
+        if (isRotatingGrabbedItem) return;
         if (grabController == null || !grabController.IsGrabbing) {
             equipmentController?.HandleFire2Down();
         }
-        // else: RMB does nothing while actively grabbing/holding for now
     }
     private void HandleFire2Cancel() {
+         if (isRotatingGrabbedItem) return;
          if (grabController == null || !grabController.IsGrabbing)
             equipmentController?.HandleFire2Up();
     }
     private void HandleReload() {
-         if (grabController == null || !grabController.IsGrabbing) // Only allow reload if not grabbing
+         if (isRotatingGrabbedItem) return; 
+         if (grabController == null || !grabController.IsGrabbing) 
             equipmentController?.HandleReloadDown();
     }
+    
     private void HandleStore() {
-        // This action is now handled centrally by PlayerGrabController
+        if (isRotatingGrabbedItem) return; 
+        // The PlayerGrabController's HandleStoreAction now decides to store or pull
         grabController?.HandleStoreAction();
     }
+
     private void HandleUtilityStart() {
-        // Example: Utility key ('E' or 'F')
-        // If grabbing, could be used for a specific action on the grabbed item, or ignored.
-        // For now, let's assume it's forwarded to equipment if not grabbing.
+        if (isRotatingGrabbedItem) return;
+        // If you want Utility to do something specific while grabbing (other than rotation, which uses MMB),
+        // you could add logic here to call a method on grabController.
+        // For now, it only forwards to equipment if not grabbing.
         if (grabController == null || !grabController.IsGrabbing) {
             equipmentController?.HandleUtilityDown();
         }
-        // If grabbing, you might add: else { grabController.PerformUtilityOnGrabbed(); }
     }
     private void HandleUtilityCancel() {
+         if (isRotatingGrabbedItem) return;
          if (grabController == null || !grabController.IsGrabbing)
              equipmentController?.HandleUtilityUp();
     }
 
-    // --- Grab Rotation Handlers ---
-    private void HandleRotateHeldStarted() {
+    // Renamed to avoid conflict with internal state variable
+    private void HandleRotateHeldStartedEvent() {
         if (grabController != null && grabController.IsGrabbing) {
-            isRotatingGrabbedItem = true;
-            //grabController.StartGrabRotation();
-            // Debug.Log("PlayerManager: Rotate Held Started - isRotatingGrabbedItem = true");
+            isRotatingGrabbedItem = true; // This is the PM's state flag
+            grabController.StartGrabRotation(); // Tell PGC to enter its rotation mode
         }
     }
-    private void HandleRotateHeldEnded() {
-        isRotatingGrabbedItem = false; // Always set this to false on release
-        //grabController?.EndGrabRotation();
-        // Debug.Log("PlayerManager: Rotate Held Ended - isRotatingGrabbedItem = false");
-    }
-    private void HandleRotateDeltaPerformed(Vector2 delta) {
-        // This event is fired by PlayerInputHandler if IsRotateHeld is true during a LookPerformed event.
-        if (isRotatingGrabbedItem && grabController != null) {
-            // Debug.Log("PlayerManager: Forwarding Rotate Delta: " + delta);
-            //grabController.ApplyGrabbedItemRotationInput(delta);
+    private void HandleRotateHeldEndedEvent() {
+        if(isRotatingGrabbedItem) { // Only if we were actually in rotation mode
+            grabController?.EndGrabRotation(); // Tell PGC to exit its rotation mode
         }
+        isRotatingGrabbedItem = false; // Always reset PM's state flag
     }
-
-    // --- UI Toggle/Cancel Handlers ---
-    private void HandleToggleInventory() { uiStateController?.ToggleState(UIState.Inventory); }
-    private void HandleToggleMenu() { uiStateController?.ToggleState(UIState.Menu); }
+    
+    private void HandleToggleInventory() { 
+        if (isRotatingGrabbedItem) HandleRotateHeldEndedEvent(); // Cancel rotation if opening UI
+        uiStateController?.ToggleState(UIState.Inventory); 
+    }
+    private void HandleToggleMenu() { 
+        if (isRotatingGrabbedItem) HandleRotateHeldEndedEvent();
+        uiStateController?.ToggleState(UIState.Menu); 
+    }
     private void HandleUICancel() {
+        if (isRotatingGrabbedItem) HandleRotateHeldEndedEvent();
         if (uiStateController?.IsUIOpen ?? false)
             uiStateController.SetState(UIState.Gameplay);
      }
     private void HandleUITabNavigate() {
          if (uiStateController == null) return;
          if (uiStateController.Current == UIState.Inventory) uiStateController.SetState(UIState.Gameplay);
-         else if (uiStateController.Current == UIState.Menu) Debug.Log("Tab in Menu - Navigation NYI");
     }
 
     public void ForceSlowWalk(bool v) => characterController?.ForceSlowWalk(v);
 }
-// --- End of script: Assets/Logic/Player/PlayerManager.cs ---
+// --- End of script
